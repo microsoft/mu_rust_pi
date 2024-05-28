@@ -15,7 +15,7 @@ resources:
   repositories:
     - repository: mu_devops
       type: github
-      endpoint: pipeline_test
+      endpoint: microsoft
       name: microsoft/mu_devops
       ref: main
 
