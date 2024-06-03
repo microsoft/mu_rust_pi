@@ -271,10 +271,7 @@ impl Section {
   }
 
   pub fn is_pe32(&self) -> bool {
-    if let FfsSection::Generic::Pe32(_) = &self.ffs_section {
-      return true;
-    }
-    false
+    matches!(&self.ffs_section, FfsSection::Generic::Pe32(_))
   }
 
   pub fn base_address(&self) -> u64 {

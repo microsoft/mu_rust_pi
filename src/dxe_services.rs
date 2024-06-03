@@ -14,7 +14,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause-Patent
 //!
 
-use core::ffi::c_void;
+use core::{default::Default, ffi::c_void};
 
 use r_efi::{
   efi::{Guid, Handle, PhysicalAddress, Status},
@@ -290,7 +290,7 @@ pub struct DxeServicesTable {
   pub set_memory_space_capabilities: SetMemorySpaceCapabilities,
 }
 
-impl core::default::Default for MemorySpaceDescriptor {
+impl Default for MemorySpaceDescriptor {
   fn default() -> Self {
     Self {
       base_address: Default::default(),
@@ -304,7 +304,7 @@ impl core::default::Default for MemorySpaceDescriptor {
   }
 }
 
-impl core::default::Default for IoSpaceDescriptor {
+impl Default for IoSpaceDescriptor {
   fn default() -> Self {
     Self {
       base_address: Default::default(),
