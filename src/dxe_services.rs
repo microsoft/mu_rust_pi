@@ -36,7 +36,7 @@ pub type AddMemorySpace = extern "efiapi" fn(GcdMemoryType, PhysicalAddress, u64
 /// # Documentation
 /// UEFI Platform Initialization Specification, Release 1.8, Section II-7.2.4.2
 pub type AllocateMemorySpace =
-  extern "efiapi" fn(GcdAllocateType, GcdMemoryType, u32, u64, *mut PhysicalAddress, Handle, Handle) -> Status;
+  extern "efiapi" fn(GcdAllocateType, GcdMemoryType, usize, u64, *mut PhysicalAddress, Handle, Handle) -> Status;
 
 /// This service frees nonexistent memory, reserved memory, system memory,
 /// or memory-mapped I/O resources from the global coherency domain of the processor.
@@ -87,7 +87,7 @@ pub type AddIoSpace = extern "efiapi" fn(GcdIoType, PhysicalAddress, u64) -> Sta
 /// # Documentation
 /// UEFI Platform Initialization Specification, Release 1.8, Section II-7.2.4.10
 pub type AllocateIoSpace =
-  extern "efiapi" fn(GcdAllocateType, GcdIoType, u32, u64, *mut PhysicalAddress, Handle, Handle) -> Status;
+  extern "efiapi" fn(GcdAllocateType, GcdIoType, usize, u64, *mut PhysicalAddress, Handle, Handle) -> Status;
 
 /// This service frees nonexistent I/O, reserved I/O, or I/O resources from the global coherency domain of the processor.
 ///
@@ -137,7 +137,7 @@ pub type Trust = extern "efiapi" fn(Handle, *const Guid) -> Status;
 ///
 /// # Documentation
 /// UEFI Platform Initialization Specification, Release 1.8, Section II-7.3. II-59 (This one does not have a section)
-pub type ProcessFirmwareVolume = extern "efiapi" fn(*const c_void, u32, *mut Handle) -> Status;
+pub type ProcessFirmwareVolume = extern "efiapi" fn(*const c_void, usize, *mut Handle) -> Status;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
