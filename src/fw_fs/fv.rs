@@ -18,7 +18,7 @@ extern crate alloc;
 use crate::address_helper::align_up;
 use alloc::string::ToString;
 use core::{fmt, slice};
-use r_efi::efi::Guid;
+use r_efi::efi;
 use uuid::Uuid;
 
 use crate::fw_fs::{
@@ -49,7 +49,7 @@ pub enum WritePolicy {
 #[derive(Debug)]
 pub struct Header {
   pub(crate) zero_vector: [u8; 16],
-  pub(crate) file_system_guid: Guid,
+  pub(crate) file_system_guid: efi::Guid,
   pub(crate) fv_length: u64,
   pub(crate) signature: u32,
   pub(crate) attributes: EfiFvbAttributes2,
@@ -72,7 +72,7 @@ pub(crate) struct BlockMapEntry {
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct ExtHeader {
-  pub(crate) fv_name: Guid,
+  pub(crate) fv_name: efi::Guid,
   pub(crate) ext_header_size: u32,
 }
 
@@ -112,7 +112,7 @@ impl FirmwareVolume {
     }
   }
 
-  pub fn fv_name(&self) -> Option<Guid> {
+  pub fn fv_name(&self) -> Option<efi::Guid> {
     if let Some(ext_header) = self.ext_header() {
       return unsafe { Some((*ext_header).fv_name) };
     }
