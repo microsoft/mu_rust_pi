@@ -12,6 +12,7 @@
 
 pub mod attributes;
 pub mod file;
+pub mod guid;
 pub mod section;
 
 use core::{
