@@ -82,12 +82,17 @@ pub struct FirmwareVolume {
 }
 
 impl FirmwareVolume {
-  pub fn new(base_address: u64) -> FirmwareVolume {
+  /// Instantiate a new FirmwareVolume structure given the base address of an FV in memory.
+  /// ## Safety
+  /// Caller must ensure that base_address points to the start of a valid FV header and that it is safe to access memory
+  /// from the start of that header to the full length specified by the FV header.
+  /// Various sanity checks will be performed by this routine to ensure FV consistency.
+  pub unsafe fn new(base_address: efi::PhysicalAddress) -> Result<FirmwareVolume, efi::Status> {
     let fv_header = base_address as *const self::Header;
     // Note: This assumes that base_address points to something that is an FV with an FFS on it.
     // More robust code would evaluate the FV header file_system_guid and make sure it actually has the correct
     // filesystem type, and probably a number of other sanity checks.
-    FirmwareVolume { fv_header }
+    Ok(FirmwareVolume { fv_header })
   }
 
   fn ext_header(&self) -> Option<*const ExtHeader> {
@@ -205,6 +210,7 @@ mod unit_tests {
   };
 
   use core::slice;
+  use r_efi::efi;
   use serde::Deserialize;
   use uuid::Uuid;
 
@@ -248,7 +254,7 @@ mod unit_tests {
     let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
 
     let fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
-    let fv = FirmwareVolume::new(fv_bytes.as_ptr() as u64);
+    let fv = unsafe { FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap() };
 
     let mut expected_values =
       serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("DXEFV_expected_values.yml"))?)?;
