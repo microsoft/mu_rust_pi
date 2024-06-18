@@ -145,15 +145,15 @@ impl FirmwareVolume {
     Ok(FirmwareVolume { fv_header: fv_header.as_ref().unwrap() })
   }
 
-  fn ext_header(&self) -> Option<*const ExtHeader> {
+  fn ext_header(&self) -> Option<&'static ExtHeader> {
     let ext_header_offset = self.fv_header.ext_header_offset as u64;
     if ext_header_offset == 0 {
       return None;
     }
-    Some((self.base_address() + ext_header_offset) as *const ExtHeader)
+    unsafe { ((self.base_address() + ext_header_offset) as *const ExtHeader).as_ref() }
   }
 
-  fn block_map(&self) -> &[BlockMapEntry] {
+  fn block_map(&self) -> &'static [BlockMapEntry] {
     let block_map_start = self.fv_header.block_map.as_ptr();
     let mut count = 0;
     let mut current_block_map_ptr = block_map_start;
@@ -170,7 +170,7 @@ impl FirmwareVolume {
 
   pub fn fv_name(&self) -> Option<efi::Guid> {
     if let Some(ext_header) = self.ext_header() {
-      return unsafe { Some((*ext_header).fv_name) };
+      return Some(ext_header.fv_name);
     }
     None
   }
@@ -179,10 +179,8 @@ impl FirmwareVolume {
     let mut ffs_address = self.fv_header as *const Header as u64;
     if let Some(ext_header) = self.ext_header() {
       // if ext header exists, then file starts after ext header
-      unsafe {
-        ffs_address += (*self.fv_header).ext_header_offset as u64;
-        ffs_address += (*ext_header).ext_header_size as u64;
-      }
+      ffs_address += self.fv_header.ext_header_offset as u64;
+      ffs_address += ext_header.ext_header_size as u64;
     } else {
       // otherwise the file starts after the main header.
       ffs_address += self.fv_header.header_length as u64
