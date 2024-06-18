@@ -45,22 +45,34 @@ use crate::{
 /// Firmware File System (FFS) File
 pub struct File {
   containing_fv: FirmwareVolume,
-  ffs_file: *const FfsFileHeader,
+  ffs_file: &'static FfsFileHeader,
 }
 
 impl File {
-  pub fn new(containing_fv: FirmwareVolume, base_address: u64) -> File {
-    let ffs_file: *const FfsFileHeader = base_address as *const FfsFileHeader;
-    File { containing_fv, ffs_file }
+  /// Instantiate a new File structure given the containing volume and base address.
+  ///
+  /// ## Safety
+  /// Caller must ensure that base_address points to the start of a valid FFS header and that it is safe to access
+  /// memory from the start of that header to the full length fo the file specified by that header. Caller must also
+  /// ensure that the memory containing the file data outlives the File instance.
+  ///
+  /// Various sanity checks will be performed by this routine to ensure File consistency.
+  pub unsafe fn new(containing_fv: FirmwareVolume, file_base_address: u64) -> Result<File, efi::Status> {
+    if file_base_address < containing_fv.base_address() || containing_fv.top_address() <= file_base_address {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    let ffs_file = file_base_address as *const FfsFileHeader;
+    let ffs_file = ffs_file.as_ref().ok_or(efi::Status::INVALID_PARAMETER)?;
+
+    Ok(File { containing_fv, ffs_file })
   }
 
   pub fn file_size(&self) -> u64 {
     let mut size: u64 = 0;
-    unsafe {
-      size += (*self.ffs_file).size[0] as u64;
-      size += ((*self.ffs_file).size[1] as u64) << 8;
-      size += ((*self.ffs_file).size[2] as u64) << 16;
-    }
+    size += (*self.ffs_file).size[0] as u64;
+    size += ((*self.ffs_file).size[1] as u64) << 8;
+    size += ((*self.ffs_file).size[2] as u64) << 16;
     size
   }
 
@@ -74,7 +86,7 @@ impl File {
   }
 
   pub fn file_type_raw(&self) -> u8 {
-    unsafe { (*self.ffs_file).file_type }
+    self.ffs_file.file_type
   }
 
   pub fn file_type(&self) -> Option<FfsFileType> {
@@ -103,7 +115,7 @@ impl File {
   }
 
   pub fn file_attributes(&self) -> EfiFvFileAttributes {
-    let attributes = unsafe { (*self.ffs_file).attributes };
+    let attributes = self.ffs_file.attributes;
     let data_alignment = (attributes & FfsRawAttribute::DATA_ALIGNMENT) >> 3;
     // decode alignment per Table 3.3 in PI spec 1.8 Part III.
     let mut file_attributes: u32 =
@@ -126,11 +138,11 @@ impl File {
   }
 
   pub fn file_name(&self) -> efi::Guid {
-    unsafe { (*self.ffs_file).name }
+    self.ffs_file.name
   }
 
   pub fn base_address(&self) -> u64 {
-    self.ffs_file as u64
+    self.ffs_file as *const FfsFileHeader as u64
   }
 
   pub fn top_address(&self) -> u64 {
@@ -144,7 +156,7 @@ impl File {
   }
 
   pub fn next_ffs_file(&self) -> Option<File> {
-    let mut next_file_address = self.ffs_file as u64;
+    let mut next_file_address = self.base_address() as u64;
     next_file_address += self.file_size();
 
     // per the PI spec, "Given a file F, the next file FvHeader is located at the next 8-byte aligned firmware volume
@@ -165,7 +177,7 @@ impl File {
         return None;
       }
 
-      let file = File::new(self.containing_fv, next_file_address);
+      let file = unsafe { File::new(self.containing_fv, next_file_address).ok()? };
       // To be super paranoid, we could check a lot of things here to make sure we have a
       // legit file and didn't run into empty space at the end of the FV. For now, assume
       // if the "file_type" is something legit, that the file is good.

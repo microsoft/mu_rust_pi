@@ -194,7 +194,7 @@ impl FirmwareVolume {
     if ffs_address + mem::size_of::<FfsFileHeader>() as u64 >= self.top_address() {
       None
     } else {
-      Some(FfsFile::new(*self, ffs_address))
+      unsafe { FfsFile::new(*self, ffs_address).ok() }
     }
   }
 
