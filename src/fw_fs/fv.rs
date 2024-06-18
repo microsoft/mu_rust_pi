@@ -60,7 +60,7 @@ pub struct Header {
   pub(crate) ext_header_offset: u16,
   pub(crate) reserved: u8,
   pub(crate) revision: u8,
-  // Block map starts here
+  pub(crate) block_map: [BlockMapEntry; 0],
 }
 
 #[repr(C)]
@@ -154,10 +154,11 @@ impl FirmwareVolume {
   }
 
   fn block_map(&self) -> &[BlockMapEntry] {
-    let block_map_start = unsafe { self.fv_header.offset(1) as *const BlockMapEntry };
+    let block_map_start = unsafe { &(*self.fv_header).block_map }.as_ptr();
     let mut count = 0;
     let mut current_block_map_ptr = block_map_start;
 
+    //the block map is terminated by an entry with num_blocks = 0 and length = 0.
     unsafe {
       while (*current_block_map_ptr).num_blocks != 0 && (*current_block_map_ptr).length != 0 {
         count += 1;
@@ -259,14 +260,14 @@ mod unit_tests {
     path::Path,
   };
 
-  use core::slice;
+  use core::{mem, slice};
   use r_efi::efi;
   use serde::Deserialize;
   use uuid::Uuid;
 
   use crate::fw_fs::{
     ffs::{file::raw::r#type as FfsRawFileType, section::Type as FfsSectionType, Section as FfsSection},
-    fv::FirmwareVolume,
+    fv::{BlockMapEntry, FirmwareVolume},
   };
 
   use super::Header;
@@ -443,5 +444,34 @@ mod unit_tests {
     };
 
     Ok(())
+  }
+
+  #[test]
+  fn zero_size_block_map_gives_same_offset_as_no_block_map() {
+    //code in FirmwareVolume::block_map() assumes that the size of a struct that ends in a zero-size array is the same
+    //as an identical struct that doesn't have the array at all. This unit test validates that assumption.
+    #[repr(C)]
+    struct A {
+      foo: usize,
+      bar: u32,
+      baz: u32,
+      block_map: [BlockMapEntry; 0],
+    }
+
+    #[repr(C)]
+    struct B {
+      foo: usize,
+      bar: u32,
+      baz: u32,
+    }
+    assert_eq!(mem::size_of::<A>(), mem::size_of::<B>());
+
+    let a = A { foo: 0, bar: 0, baz: 0, block_map: [BlockMapEntry { length: 0, num_blocks: 0 }; 0] };
+
+    let a_ptr = &a as *const A;
+
+    unsafe {
+      assert_eq!((&(*a_ptr).block_map).as_ptr(), a_ptr.offset(1) as *const BlockMapEntry);
+    }
   }
 }
