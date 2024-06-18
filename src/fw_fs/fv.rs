@@ -26,7 +26,10 @@ use crate::fw_fs::{
   fvb::attributes::EfiFvbAttributes2,
 };
 
-use super::ffs::guid::{EFI_FIRMWARE_FILE_SYSTEM2_GUID, EFI_FIRMWARE_FILE_SYSTEM3_GUID};
+use super::ffs::{
+  file::Header as FfsFileHeader,
+  guid::{EFI_FIRMWARE_FILE_SYSTEM2_GUID, EFI_FIRMWARE_FILE_SYSTEM3_GUID},
+};
 
 pub type EfiFvFileType = u8;
 
@@ -175,7 +178,7 @@ impl FirmwareVolume {
     None
   }
 
-  pub fn first_ffs_file(&self) -> FfsFile {
+  pub fn first_ffs_file(&self) -> Option<FfsFile> {
     let mut ffs_address = self.fv_header as *const Header as u64;
     if let Some(ext_header) = self.ext_header() {
       // if ext header exists, then file starts after ext header
@@ -186,10 +189,13 @@ impl FirmwareVolume {
       ffs_address += self.fv_header.header_length as u64
     }
     ffs_address = align_up(ffs_address, 0x8);
-    // Note: it appears possible from the EDK2 implementation that an FV could have a file system with no actual
-    // files.
-    // More robust code would check and handle that case.
-    FfsFile::new(*self, ffs_address)
+
+    //Check the case where the FV contains no files.
+    if ffs_address + mem::size_of::<FfsFileHeader>() as u64 >= self.top_address() {
+      None
+    } else {
+      Some(FfsFile::new(*self, ffs_address))
+    }
   }
 
   pub fn ffs_files(&self) -> impl Iterator<Item = FfsFile> {

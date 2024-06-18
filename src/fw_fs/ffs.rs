@@ -207,8 +207,8 @@ pub(crate) struct FileIterator {
 }
 
 impl FileIterator {
-  pub fn new(start_file: File) -> FileIterator {
-    FileIterator { next_ffs: Some(start_file) }
+  pub fn new(start_file: Option<File>) -> FileIterator {
+    FileIterator { next_ffs: start_file }
   }
 }
 
