@@ -17,7 +17,7 @@ extern crate alloc;
 
 use crate::address_helper::align_up;
 use alloc::string::ToString;
-use core::{fmt, slice};
+use core::{fmt, mem, num::Wrapping, slice};
 use r_efi::efi;
 use uuid::Uuid;
 
@@ -25,6 +25,8 @@ use crate::fw_fs::{
   ffs::{File as FfsFile, FileIterator as FfsFileIterator},
   fvb::attributes::EfiFvbAttributes2,
 };
+
+use super::ffs::guid::{EFI_FIRMWARE_FILE_SYSTEM2_GUID, EFI_FIRMWARE_FILE_SYSTEM3_GUID};
 
 pub type EfiFvFileType = u8;
 
@@ -83,15 +85,63 @@ pub struct FirmwareVolume {
 
 impl FirmwareVolume {
   /// Instantiate a new FirmwareVolume structure given the base address of an FV in memory.
+  ///
   /// ## Safety
   /// Caller must ensure that base_address points to the start of a valid FV header and that it is safe to access memory
-  /// from the start of that header to the full length specified by the FV header.
+  /// from the start of that header to the full length specified by the FV header. Caller must also ensure that the
+  /// memory containing the FV outlives the FirmwareVolume instance.
+  ///
   /// Various sanity checks will be performed by this routine to ensure FV consistency.
   pub unsafe fn new(base_address: efi::PhysicalAddress) -> Result<FirmwareVolume, efi::Status> {
     let fv_header = base_address as *const self::Header;
-    // Note: This assumes that base_address points to something that is an FV with an FFS on it.
-    // More robust code would evaluate the FV header file_system_guid and make sure it actually has the correct
-    // filesystem type, and probably a number of other sanity checks.
+
+    // sanity checks
+
+    // signature: must be ASCII '_FVH'
+    if (*fv_header).signature != 0x4856465f {
+      //'_FVH'
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    // header_length: must be large enough to hold the header.
+    if (*fv_header).header_length < mem::size_of::<Header>().try_into().unwrap() {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    // checksum: fv header must sum to zero (and must be multiple of u16 bytes)
+    if (*fv_header).header_length % (mem::size_of::<u16>() as u16) != 0 {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+    let header_size = (*fv_header).header_length / (mem::size_of::<u16>() as u16);
+    if Wrapping(0u16)
+      != slice::from_raw_parts(fv_header as *const u16, header_size as usize).iter().map(|&x| Wrapping(x)).sum()
+    {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    // revision: must be at least 2. Assumes that if later specs bump the rev they will maintain
+    // backwards compat with existing header definition.
+    if (*fv_header).revision < 2 {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    // file_system_guid: must be EFI_FIRMWARE_FILE_SYSTEM2_GUID or EFI_FIRMWARE_FILE_SYSTEM3_GUID.
+    if (*fv_header).file_system_guid != EFI_FIRMWARE_FILE_SYSTEM2_GUID
+      && (*fv_header).file_system_guid != EFI_FIRMWARE_FILE_SYSTEM3_GUID
+    {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    // fv_length: must be large enough to hold the header.
+    if (*fv_header).fv_length < (*fv_header).header_length as u64 {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    //ext_header_offset: must be inside the fv
+    if (*fv_header).ext_header_offset as u64 > (*fv_header).fv_length {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
     Ok(FirmwareVolume { fv_header })
   }
 
@@ -219,6 +269,8 @@ mod unit_tests {
     fv::FirmwareVolume,
   };
 
+  use super::Header;
+
   #[derive(Debug, Deserialize)]
   struct TargetValues {
     total_number_of_files: u32,
@@ -328,5 +380,68 @@ mod unit_tests {
     } else {
       None
     }
+  }
+
+  #[test]
+  fn test_malformed_firmware_volume() -> Result<(), Box<dyn Error>> {
+    let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
+
+    // bogus signature.
+    let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
+    let fv_header = fv_bytes.as_mut_ptr() as *mut Header;
+    unsafe {
+      (*fv_header).signature ^= 0xdeadbeef;
+      FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap_err()
+    };
+
+    // bogus header_length.
+    let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
+    let fv_header = fv_bytes.as_mut_ptr() as *mut Header;
+    unsafe {
+      (*fv_header).header_length = 0;
+      FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap_err()
+    };
+
+    // bogus checksum.
+    let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
+    let fv_header = fv_bytes.as_mut_ptr() as *mut Header;
+    unsafe {
+      (*fv_header).checksum ^= 0xbeef;
+      FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap_err()
+    };
+
+    // bogus revision.
+    let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
+    let fv_header = fv_bytes.as_mut_ptr() as *mut Header;
+    unsafe {
+      (*fv_header).revision = 1;
+      FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap_err()
+    };
+
+    // bogus filesystem guid.
+    let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
+    let fv_header = fv_bytes.as_mut_ptr() as *mut Header;
+    unsafe {
+      (*fv_header).file_system_guid = efi::Guid::from_bytes(&[0xa5; 16]);
+      FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap_err()
+    };
+
+    // bogus fv length.
+    let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
+    let fv_header = fv_bytes.as_mut_ptr() as *mut Header;
+    unsafe {
+      (*fv_header).fv_length = 0;
+      FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap_err()
+    };
+
+    // bogus ext header offset.
+    let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
+    let fv_header = fv_bytes.as_mut_ptr() as *mut Header;
+    unsafe {
+      (*fv_header).fv_length = ((*fv_header).ext_header_offset - 1) as u64;
+      FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap_err()
+    };
+
+    Ok(())
   }
 }
