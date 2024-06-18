@@ -286,7 +286,7 @@ mod unit_tests {
   struct FfsFileTargetValues {
     base_address: u64,
     file_type: u8,
-    attributes: u32,
+    attributes: u8,
     size: u64,
     data_size: usize,
     number_of_sections: usize,
@@ -328,13 +328,84 @@ mod unit_tests {
           "[{file_name}] Error with the file Base Address"
         );
         assert_eq!(target.file_type, ffs_file.file_type_raw(), "[{file_name}] Error with the file type.");
-        assert_eq!(target.attributes, ffs_file.file_attributes(), "[{file_name}] Error with the file attributes.");
+        assert_eq!(target.attributes, ffs_file.file_attributes_raw(), "[{file_name}] Error with the file attributes.");
+        assert_eq!(target.size, ffs_file.file_size(), "[{file_name}] Error with the file size (Full size).");
         assert_eq!(
           target.data_size,
-          ffs_file.file_data_size(),
+          ffs_file.file_data_size() as usize,
           "[{file_name}] Error with the file data size (Body size)."
         );
+        assert_eq!(
+          target.number_of_sections,
+          sections.len(),
+          "[{file_name}] Error with the number of section in the File"
+        );
+
+        for (idx, section) in sections.iter().enumerate() {
+          if let Some(target) = target.sections.remove(&idx) {
+            assert_eq!(
+              target.base_address,
+              section.base_address() - fv_bytes.as_ptr() as u64,
+              "[{file_name}, section: {idx}] Error with the section Base Address"
+            );
+            assert_eq!(
+              target.section_type,
+              section.section_type(),
+              "[{file_name}, section: {idx}] Error with the section Type"
+            );
+            assert_eq!(
+              target.size,
+              section.section_size(),
+              "[{file_name}, section: {idx}] Error with the section Size"
+            );
+            assert_eq!(
+              target.text,
+              extract_text_from_section(section),
+              "[{file_name}, section: {idx}] Error with the section Text"
+            );
+          }
+        }
+
+        assert!(target.sections.is_empty(), "Some section use case has not been run.");
+      }
+    }
+    assert_eq!(
+      expected_values.total_number_of_files, count,
+      "The number of file found does not match the expected one."
+    );
+    assert!(expected_values.files_to_test.is_empty(), "Some file use case has not been run.");
+    Ok(())
+  }
+
+  #[test]
+  fn test_giant_firmware_volume() -> Result<(), Box<dyn Error>> {
+    let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
+
+    let fv_bytes = fs::read(root.join("GIGANTOR.Fv"))?;
+    let fv = unsafe { FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap() };
+
+    let mut expected_values =
+      serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("GIGANTOR_expected_values.yml"))?)?;
+
+    let mut count = 0;
+    for ffs_file in fv.ffs_files() {
+      count += 1;
+      let file_name = Uuid::from_bytes_le(*ffs_file.file_name().as_bytes()).to_string().to_uppercase();
+      let sections = ffs_file.ffs_sections().collect::<Vec<_>>();
+      if let Some(mut target) = expected_values.files_to_test.remove(&file_name) {
+        assert_eq!(
+          target.base_address,
+          ffs_file.base_address() - fv_bytes.as_ptr() as u64,
+          "[{file_name}] Error with the file Base Address"
+        );
+        assert_eq!(target.file_type, ffs_file.file_type_raw(), "[{file_name}] Error with the file type.");
+        assert_eq!(target.attributes, ffs_file.file_attributes_raw(), "[{file_name}] Error with the file attributes.");
         assert_eq!(target.size, ffs_file.file_size(), "[{file_name}] Error with the file size (Full size).");
+        assert_eq!(
+          target.data_size,
+          ffs_file.file_data_size() as usize,
+          "[{file_name}] Error with the file data size (Body size)."
+        );
         assert_eq!(
           target.number_of_sections,
           sections.len(),

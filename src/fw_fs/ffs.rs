@@ -17,10 +17,11 @@ pub mod section;
 
 use core::{
   fmt,
-  mem::{size_of, size_of_val},
+  mem::{self, size_of, size_of_val},
   slice,
 };
 
+use attributes::raw::LARGE_FILE;
 use r_efi::efi;
 use uuid::Uuid;
 
@@ -28,8 +29,8 @@ use crate::{
   address_helper::align_up,
   fw_fs::{
     ffs::{
-      attributes::raw as FfsRawAttribute,
-      file::{raw::r#type as FfsFileRawType, Header as FfsFileHeader, Type as FfsFileType},
+      attributes::raw as EfiFfsFileAttributeRaw,
+      file::{raw::r#type as FfsFileRawType, Type as FfsFileType},
       section as FfsSection,
       section::{header as FfsSectionHeader, raw_type as FfsSectionRawType},
     },
@@ -41,11 +42,67 @@ use crate::{
   },
 };
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum FfsFileHeader {
+  Standard(&'static file::Header),
+  Extended(&'static file::Header2),
+}
+
+impl FfsFileHeader {
+  fn header(&self) -> &'static file::Header {
+    match self {
+      Self::Standard(header) => header,
+      Self::Extended(header) => &header.header,
+    }
+  }
+  fn size(&self) -> u64 {
+    match self {
+      Self::Standard(header) => {
+        let mut size: u64 = 0;
+        size += header.size[0] as u64;
+        size += (header.size[1] as u64) << 8;
+        size += (header.size[2] as u64) << 16;
+        size
+      }
+      Self::Extended(header) => header.extended_size,
+    }
+  }
+
+  fn data_offset(&self) -> u64 {
+    match self {
+      Self::Standard(_) => mem::size_of::<file::Header>() as u64,
+      Self::Extended(_) => mem::size_of::<file::Header2>() as u64,
+    }
+  }
+
+  fn base_address(&self) -> u64 {
+    match self {
+      Self::Standard(header) => *header as *const file::Header as u64,
+      Self::Extended(header2) => *header2 as *const file::Header2 as u64,
+    }
+  }
+
+  fn data_address(&self) -> u64 {
+    self.base_address() + self.data_offset()
+  }
+}
+
+impl From<&'static file::Header> for FfsFileHeader {
+  fn from(file: &'static file::Header) -> Self {
+    if (file.attributes & LARGE_FILE) != 0 {
+      let extended = unsafe { (file as *const file::Header as *const file::Header2).as_ref().unwrap() };
+      Self::Extended(extended)
+    } else {
+      Self::Standard(file)
+    }
+  }
+}
+
 #[derive(Copy, Clone)]
 /// Firmware File System (FFS) File
 pub struct File {
   containing_fv: FirmwareVolume,
-  ffs_file: &'static FfsFileHeader,
+  ffs_file: FfsFileHeader,
 }
 
 impl File {
@@ -62,31 +119,24 @@ impl File {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
-    let ffs_file = file_base_address as *const FfsFileHeader;
+    let ffs_file = file_base_address as *const file::Header;
     let ffs_file = ffs_file.as_ref().ok_or(efi::Status::INVALID_PARAMETER)?;
+
+    let ffs_file = ffs_file.try_into().map_err(|_| efi::Status::INVALID_PARAMETER)?;
 
     Ok(File { containing_fv, ffs_file })
   }
 
   pub fn file_size(&self) -> u64 {
-    let mut size: u64 = 0;
-    size += (*self.ffs_file).size[0] as u64;
-    size += ((*self.ffs_file).size[1] as u64) << 8;
-    size += ((*self.ffs_file).size[2] as u64) << 16;
-    size
+    self.ffs_file.size()
   }
 
-  pub fn file_data_size(&self) -> usize {
-    let file_size = self.file_size() as usize;
-    if size_of::<FfsFileHeader>() > file_size {
-      0
-    } else {
-      file_size - size_of::<FfsFileHeader>()
-    }
+  pub fn file_data_size(&self) -> u64 {
+    self.ffs_file.size() - self.ffs_file.data_offset()
   }
 
   pub fn file_type_raw(&self) -> u8 {
-    self.ffs_file.file_type
+    self.ffs_file.header().file_type
   }
 
   pub fn file_type(&self) -> Option<FfsFileType> {
@@ -114,35 +164,41 @@ impl File {
     }
   }
 
-  pub fn file_attributes(&self) -> EfiFvFileAttributes {
-    let attributes = self.ffs_file.attributes;
-    let data_alignment = (attributes & FfsRawAttribute::DATA_ALIGNMENT) >> 3;
+  pub fn fv_file_attributes(&self) -> EfiFvFileAttributes {
+    let attributes = self.ffs_file.header().attributes;
+    let data_alignment = (attributes & EfiFfsFileAttributeRaw::DATA_ALIGNMENT) >> 3;
     // decode alignment per Table 3.3 in PI spec 1.8 Part III.
-    let mut file_attributes: u32 =
-      match (data_alignment, (attributes & FfsRawAttribute::DATA_ALIGNMENT_2) == FfsRawAttribute::DATA_ALIGNMENT_2) {
-        (0, false) => 0,
-        (1, false) => 4,
-        (2, false) => 7,
-        (3, false) => 9,
-        (4, false) => 10,
-        (5, false) => 12,
-        (6, false) => 15,
-        (7, false) => 16,
-        (x, true) if (0..8).contains(&x) => (17 + x) as u32,
-        (_, _) => panic!("Invalid data_alignment!"),
-      };
-    if attributes & FfsRawAttribute::FIXED != 0 {
+    let mut file_attributes: u32 = match (
+      data_alignment,
+      (attributes & EfiFfsFileAttributeRaw::DATA_ALIGNMENT_2) == EfiFfsFileAttributeRaw::DATA_ALIGNMENT_2,
+    ) {
+      (0, false) => 0,
+      (1, false) => 4,
+      (2, false) => 7,
+      (3, false) => 9,
+      (4, false) => 10,
+      (5, false) => 12,
+      (6, false) => 15,
+      (7, false) => 16,
+      (x, true) if (0..8).contains(&x) => (17 + x) as u32,
+      (_, _) => panic!("Invalid data_alignment!"),
+    };
+    if attributes & EfiFfsFileAttributeRaw::FIXED != 0 {
       file_attributes |= FvRawAttribute::FIXED;
     }
     file_attributes as EfiFvFileAttributes
   }
 
+  pub fn file_attributes_raw(&self) -> u8 {
+    self.ffs_file.header().attributes
+  }
+
   pub fn file_name(&self) -> efi::Guid {
-    self.ffs_file.name
+    self.ffs_file.header().name
   }
 
   pub fn base_address(&self) -> u64 {
-    self.ffs_file as *const FfsFileHeader as u64
+    self.ffs_file.base_address()
   }
 
   pub fn top_address(&self) -> u64 {
@@ -150,9 +206,8 @@ impl File {
   }
 
   pub fn file_data(&self) -> &[u8] {
-    let data_ptr = self.base_address() as usize + size_of::<FfsFileHeader>();
-    let data_ptr = data_ptr as *mut u8;
-    unsafe { slice::from_raw_parts(data_ptr, self.file_data_size()) }
+    let data_ptr = self.ffs_file.data_address() as *mut u8;
+    unsafe { slice::from_raw_parts(data_ptr, self.file_data_size() as usize) }
   }
 
   pub fn next_ffs_file(&self) -> Option<File> {
@@ -190,10 +245,10 @@ impl File {
   }
 
   pub fn first_ffs_section(&self) -> Option<Section> {
-    if self.file_size() <= size_of::<FfsFileHeader>() as u64 {
+    if self.file_size() <= self.ffs_file.data_offset() as u64 {
       return None;
     }
-    Some(Section::new(*self, self.base_address() + size_of::<FfsFileHeader>() as u64))
+    Some(Section::new(*self, self.ffs_file.data_address()))
   }
 
   pub fn ffs_sections(&self) -> impl Iterator<Item = Section> {
