@@ -23,6 +23,7 @@ use core::{
 
 use attributes::raw::LARGE_FILE;
 use r_efi::efi;
+use section::header::{CommonSectionHeaderExtended, CommonSectionHeaderStandard};
 use uuid::Uuid;
 
 use crate::{
@@ -248,7 +249,8 @@ impl File {
     if self.file_size() <= self.ffs_file.data_offset() as u64 {
       return None;
     }
-    Some(Section::new(*self, self.ffs_file.data_address()))
+    let first_section = unsafe { Section::new(*self, self.ffs_file.data_address()).ok()? };
+    Some(first_section)
   }
 
   pub fn ffs_sections(&self) -> impl Iterator<Item = Section> {
@@ -288,113 +290,172 @@ impl Iterator for FileIterator {
   }
 }
 
-#[derive(Copy, Clone)]
-pub struct Section {
-  containing_ffs: File,
-  common_header: *const FfsSectionHeader::Common,
-  ffs_section: FfsSection::Generic,
+#[derive(Debug, Clone, Copy)]
+pub enum CommonSectionHeader {
+  Standard(&'static FfsSectionHeader::CommonSectionHeaderStandard),
+  Extended(&'static FfsSectionHeader::CommonSectionHeaderExtended),
 }
 
-impl Section {
-  pub fn new(containing_ffs: File, base_address: u64) -> Section {
-    let common_header: *const FfsSectionHeader::Common = base_address as *const FfsSectionHeader::Common;
-    Section {
-      containing_ffs,
-      common_header,
-      ffs_section: match unsafe { (*common_header).section_type } {
-        FfsSectionRawType::encapsulated::COMPRESSION => {
-          FfsSection::Generic::Compression(common_header as *const FfsSectionHeader::Compression)
-        }
-        FfsSectionRawType::encapsulated::GUID_DEFINED => {
-          FfsSection::Generic::GuidDefined(common_header as *const FfsSectionHeader::GuidDefined)
-        }
-        FfsSectionRawType::encapsulated::DISPOSABLE => {
-          FfsSection::Generic::Disposable(common_header as *const FfsSectionHeader::Disposable)
-        }
-        FfsSectionRawType::PE32 => FfsSection::Generic::Pe32(common_header as *const FfsSectionHeader::Pe32),
-        FfsSectionRawType::PIC => FfsSection::Generic::Pic(common_header as *const FfsSectionHeader::Pic),
-        FfsSectionRawType::TE => FfsSection::Generic::Te(common_header as *const FfsSectionHeader::Te),
-        FfsSectionRawType::DXE_DEPEX => {
-          FfsSection::Generic::DxeDepex(common_header as *const FfsSectionHeader::DxeDepex)
-        }
-        FfsSectionRawType::VERSION => FfsSection::Generic::Version(common_header as *const FfsSectionHeader::Version),
-        FfsSectionRawType::USER_INTERFACE => {
-          FfsSection::Generic::UserInterface(common_header as *const FfsSectionHeader::UserInterface)
-        }
-        FfsSectionRawType::COMPATIBILITY16 => {
-          FfsSection::Generic::Compatibility16(common_header as *const FfsSectionHeader::Compatibility16)
-        }
-        FfsSectionRawType::FIRMWARE_VOLUME_IMAGE => {
-          FfsSection::Generic::FirmwareVolumeImage(common_header as *const FfsSectionHeader::FirmwareVolumeImage)
-        }
-        FfsSectionRawType::FREEFORM_SUBTYPE_GUID => {
-          FfsSection::Generic::FreeformSubtypeGuid(common_header as *const FfsSectionHeader::FreeformSubtypeGuid)
-        }
-        FfsSectionRawType::RAW => FfsSection::Generic::Raw(common_header as *const FfsSectionHeader::Raw),
-        FfsSectionRawType::PEI_DEPEX => {
-          FfsSection::Generic::PeiDepex(common_header as *const FfsSectionHeader::PeiDepex)
-        }
-        FfsSectionRawType::MM_DEPEX => FfsSection::Generic::MmDepex(common_header as *const FfsSectionHeader::MmDepex),
-        _ => FfsSection::Generic::Unknown(common_header),
-      },
+impl CommonSectionHeader {
+  unsafe fn new(base_address: u64) -> Result<CommonSectionHeader, ()> {
+    let common_hdr_ptr =
+      unsafe { (base_address as *const FfsSectionHeader::CommonSectionHeaderStandard).as_ref().ok_or(())? };
+
+    let size = &common_hdr_ptr.size;
+
+    if size.iter().all(|x| *x == 0xff) {
+      let extended_hdr_ptr =
+        unsafe { (base_address as *const FfsSectionHeader::CommonSectionHeaderExtended).as_ref().ok_or(())? };
+      Ok(CommonSectionHeader::Extended(&extended_hdr_ptr))
+    } else {
+      Ok(CommonSectionHeader::Standard(&common_hdr_ptr))
     }
   }
 
+  fn section_type(&self) -> u8 {
+    match self {
+      CommonSectionHeader::Standard(header) => header.section_type,
+      CommonSectionHeader::Extended(header) => header.section_type,
+    }
+  }
+
+  fn section_size(&self) -> u64 {
+    match self {
+      CommonSectionHeader::Standard(header) => {
+        let mut size_bytes = header.size.to_vec();
+        size_bytes.push(0);
+        let size: u32 = u32::from_le_bytes(size_bytes.try_into().unwrap());
+        size as u64
+      }
+      CommonSectionHeader::Extended(header) => header.extended_size as u64,
+    }
+  }
+
+  fn base_address(&self) -> u64 {
+    match *self {
+      CommonSectionHeader::Standard(header) => header as *const _ as u64,
+      CommonSectionHeader::Extended(header) => header as *const _ as u64,
+    }
+  }
+
+  fn header_size(&self) -> u64 {
+    match self {
+      CommonSectionHeader::Standard(_) => mem::size_of::<CommonSectionHeaderStandard>() as u64,
+      CommonSectionHeader::Extended(_) => mem::size_of::<CommonSectionHeaderExtended>() as u64,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SectionMetaData {
+  None,
+  Compression(&'static FfsSectionHeader::Compression),
+  GuidDefined(&'static FfsSectionHeader::GuidDefined),
+  Version(&'static FfsSectionHeader::Version),
+  FreeformSubtypeGuid(&'static FfsSectionHeader::FreeformSubtypeGuid),
+}
+
+#[derive(Clone, Copy)]
+pub struct Section {
+  containing_ffs: File,
+  header: CommonSectionHeader,
+  meta_data: SectionMetaData,
+  data: &'static [u8],
+}
+
+impl Section {
+  pub unsafe fn new(containing_ffs: File, base_address: u64) -> Result<Section, ()> {
+    let header = CommonSectionHeader::new(base_address)?;
+
+    let (meta_data, data, len) = match header.section_type() {
+      FfsSectionRawType::encapsulated::COMPRESSION => {
+        let compression = (header.base_address() + header.header_size()) as *const FfsSectionHeader::Compression;
+        let compression = unsafe { compression.as_ref().ok_or(())? };
+        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Compression>() as u64;
+        let data = (header.base_address() + total_header) as *const u8;
+        let len: usize = (header.section_size() - total_header).try_into().unwrap();
+        (SectionMetaData::Compression(compression), data, len)
+      }
+      FfsSectionRawType::encapsulated::GUID_DEFINED => {
+        let guid_defined = (header.base_address() + header.header_size()) as *const FfsSectionHeader::GuidDefined;
+        let guid_defined = unsafe { guid_defined.as_ref().ok_or(())? };
+        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::GuidDefined>() as u64;
+        let data = (header.base_address() + total_header) as *const u8;
+        let len: usize = (header.section_size() - total_header).try_into().unwrap();
+        (SectionMetaData::GuidDefined(guid_defined), data, len)
+      }
+      FfsSectionRawType::VERSION => {
+        let version = (header.base_address() + header.header_size()) as *const FfsSectionHeader::Version;
+        let version = unsafe { version.as_ref().ok_or(())? };
+        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Version>() as u64;
+        let data = (header.base_address() + total_header) as *const u8;
+        let len: usize = (header.section_size() - total_header).try_into().unwrap();
+        (SectionMetaData::Version(version), data, len)
+      }
+      FfsSectionRawType::FREEFORM_SUBTYPE_GUID => {
+        let freeform_subtype =
+          (header.base_address() + header.header_size()) as *const FfsSectionHeader::FreeformSubtypeGuid;
+        let freeform_subtype = unsafe { freeform_subtype.as_ref().ok_or(())? };
+        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::FreeformSubtypeGuid>() as u64;
+        let data = (header.base_address() + total_header) as *const u8;
+        let len: usize = (header.section_size() - total_header).try_into().unwrap();
+        (SectionMetaData::FreeformSubtypeGuid(freeform_subtype), data, len)
+      }
+      _ => {
+        let data = (header.base_address() + header.header_size()) as *const u8;
+        let len: usize = (header.section_size() - header.header_size()).try_into().unwrap();
+        (SectionMetaData::None, data, len)
+      }
+    };
+
+    let data = unsafe { slice::from_raw_parts(data, len) };
+
+    Ok(Section { containing_ffs, header, meta_data, data })
+  }
+
   pub fn is_pe32(&self) -> bool {
-    matches!(&self.ffs_section, FfsSection::Generic::Pe32(_))
+    self.header.section_type() == FfsSection::Type::Pe32 as u8
   }
 
   pub fn base_address(&self) -> u64 {
-    self.common_header as u64
+    self.header.base_address()
   }
 
   pub fn section_type(&self) -> Option<FfsSection::Type> {
-    match self.ffs_section {
-      FfsSection::Generic::Compression(_) => Some(FfsSection::Type::Compression),
-      FfsSection::Generic::GuidDefined(_) => Some(FfsSection::Type::GuidDefined),
-      FfsSection::Generic::Disposable(_) => Some(FfsSection::Type::Disposable),
-      FfsSection::Generic::Pe32(_) => Some(FfsSection::Type::Pe32),
-      FfsSection::Generic::Pic(_) => Some(FfsSection::Type::Pic),
-      FfsSection::Generic::Te(_) => Some(FfsSection::Type::Te),
-      FfsSection::Generic::DxeDepex(_) => Some(FfsSection::Type::DxeDepex),
-      FfsSection::Generic::Version(_) => Some(FfsSection::Type::Version),
-      FfsSection::Generic::UserInterface(_) => Some(FfsSection::Type::UserInterface),
-      FfsSection::Generic::Compatibility16(_) => Some(FfsSection::Type::Compatibility16),
-      FfsSection::Generic::FirmwareVolumeImage(_) => Some(FfsSection::Type::FirmwareVolumeImage),
-      FfsSection::Generic::FreeformSubtypeGuid(_) => Some(FfsSection::Type::FreeformSubtypeGuid),
-      FfsSection::Generic::Raw(_) => Some(FfsSection::Type::Raw),
-      FfsSection::Generic::PeiDepex(_) => Some(FfsSection::Type::PeiDepex),
-      FfsSection::Generic::MmDepex(_) => Some(FfsSection::Type::MmDepex),
+    match self.header.section_type() {
+      FfsSectionRawType::encapsulated::COMPRESSION => Some(FfsSection::Type::Compression),
+      FfsSectionRawType::encapsulated::GUID_DEFINED => Some(FfsSection::Type::GuidDefined),
+      FfsSectionRawType::encapsulated::DISPOSABLE => Some(FfsSection::Type::Disposable),
+      FfsSectionRawType::PE32 => Some(FfsSection::Type::Pe32),
+      FfsSectionRawType::PIC => Some(FfsSection::Type::Pic),
+      FfsSectionRawType::TE => Some(FfsSection::Type::Te),
+      FfsSectionRawType::DXE_DEPEX => Some(FfsSection::Type::DxeDepex),
+      FfsSectionRawType::VERSION => Some(FfsSection::Type::Version),
+      FfsSectionRawType::USER_INTERFACE => Some(FfsSection::Type::UserInterface),
+      FfsSectionRawType::COMPATIBILITY16 => Some(FfsSection::Type::Compatibility16),
+      FfsSectionRawType::FIRMWARE_VOLUME_IMAGE => Some(FfsSection::Type::FirmwareVolumeImage),
+      FfsSectionRawType::FREEFORM_SUBTYPE_GUID => Some(FfsSection::Type::FreeformSubtypeGuid),
+      FfsSectionRawType::RAW => Some(FfsSection::Type::Raw),
+      FfsSectionRawType::PEI_DEPEX => Some(FfsSection::Type::PeiDepex),
+      FfsSectionRawType::MM_DEPEX => Some(FfsSection::Type::MmDepex),
       _ => None,
     }
   }
 
   pub fn section_size(&self) -> u64 {
-    let mut size: u64 = 0;
-    unsafe {
-      size += (*self.common_header).size[0] as u64;
-      size += ((*self.common_header).size[1] as u64) << 8;
-      size += ((*self.common_header).size[2] as u64) << 16;
-    }
-    size
+    self.header.section_size()
   }
 
   pub fn section_data(&self) -> &[u8] {
-    let data_offset = match self.ffs_section {
-      FfsSection::Generic::Compression(_) => size_of::<FfsSectionHeader::Compression>() as u64,
-      FfsSection::Generic::FreeformSubtypeGuid(_) => size_of::<FfsSectionHeader::FreeformSubtypeGuid>() as u64,
-      FfsSection::Generic::GuidDefined(guid_defined) => unsafe { (*guid_defined).data_offset as u64 },
-      _ => size_of::<FfsSectionHeader::Common>() as u64,
-    };
+    self.data
+  }
 
-    let data_start_addr = self.base_address() + data_offset;
-    let data_size = self.section_size() - data_offset;
-
-    unsafe { slice::from_raw_parts(data_start_addr as *const u8, data_size as usize) }
+  pub fn metadata(&self) -> SectionMetaData {
+    self.meta_data
   }
 
   pub fn next_section(&self) -> Option<Section> {
-    let mut next_section_address = self.common_header as u64;
+    let mut next_section_address = self.base_address();
     next_section_address += self.section_size();
 
     // per the PI spec, "The section headers aligned on 4 byte boundaries relative to the start of the file's image"
@@ -402,8 +463,11 @@ impl Section {
     next_section_address = align_up(next_section_address, 0x4);
 
     // check to see if we ran off the end of the file yet.
-    if next_section_address <= (self.containing_ffs.top_address() - size_of::<FfsSectionHeader::Common>() as u64) {
-      return Some(Section::new(self.containing_ffs, next_section_address));
+    if next_section_address
+      <= (self.containing_ffs.top_address() - mem::size_of::<FfsSectionHeader::CommonSectionHeaderStandard>() as u64)
+    {
+      let next_section = unsafe { Section::new(self.containing_ffs, next_section_address).ok()? };
+      return Some(next_section);
     }
     None
   }
@@ -411,7 +475,7 @@ impl Section {
 
 impl fmt::Debug for Section {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "Section @{:#x} type: {:?} size: {:?}", self.base_address(), self.section_type(), self.section_size())
+    write!(f, "Section @{:#x} header: {:x?} size: 0x{:#x}", self.base_address(), self.header, self.section_size())
   }
 }
 
