@@ -81,6 +81,7 @@ pub(crate) struct ExtHeader {
   pub(crate) ext_header_size: u32,
 }
 
+/// Firmware Volume
 #[derive(Copy, Clone)]
 pub struct FirmwareVolume {
   fv_header: &'static Header,
@@ -171,6 +172,7 @@ impl FirmwareVolume {
     }
   }
 
+  /// Returns the GUID name of the Firmware Volume
   pub fn fv_name(&self) -> Option<efi::Guid> {
     if let Some(ext_header) = self.ext_header() {
       return Some(ext_header.fv_name);
@@ -178,6 +180,7 @@ impl FirmwareVolume {
     None
   }
 
+  /// Returns the first file in the Firmware Volume
   pub fn first_ffs_file(&self) -> Option<FfsFile> {
     let mut ffs_address = self.fv_header as *const Header as u64;
     if let Some(ext_header) = self.ext_header() {
@@ -198,22 +201,27 @@ impl FirmwareVolume {
     }
   }
 
+  /// Returns an iterator over all files in the firmware volume.
   pub fn ffs_files(&self) -> impl Iterator<Item = FfsFile> {
     FfsFileIterator::new(self.first_ffs_file())
   }
 
+  /// Returns the base address in memory of the firmware volume.
   pub fn base_address(&self) -> efi::PhysicalAddress {
     self.fv_header as *const Header as efi::PhysicalAddress
   }
 
+  /// returns the memory address of the end of the firmware volume (not inclusive)
   pub fn top_address(&self) -> efi::PhysicalAddress {
     self.base_address() + self.fv_header.fv_length
   }
 
+  /// returns the Firmware Volume Attributes
   pub fn attributes(&self) -> EfiFvbAttributes2 {
     self.fv_header.attributes
   }
 
+  /// returns the (linear block offset from FV base, block_size, remaining_blocks) given an LBA.
   pub fn get_lba_info(&self, lba: u32) -> Result<(u32, u32, u32), ()> {
     let block_map = self.block_map();
 

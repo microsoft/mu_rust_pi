@@ -99,8 +99,8 @@ impl From<&'static file::Header> for FfsFileHeader {
   }
 }
 
-#[derive(Copy, Clone)]
 /// Firmware File System (FFS) File
+#[derive(Copy, Clone)]
 pub struct File {
   containing_fv: FirmwareVolume,
   ffs_file: FfsFileHeader,
@@ -112,7 +112,7 @@ impl File {
   /// ## Safety
   /// Caller must ensure that base_address points to the start of a valid FFS header and that it is safe to access
   /// memory from the start of that header to the full length fo the file specified by that header. Caller must also
-  /// ensure that the memory containing the file data outlives the File instance.
+  /// ensure that the memory containing the file data outlives this File instance.
   ///
   /// Various sanity checks will be performed by this routine to ensure File consistency.
   pub unsafe fn new(containing_fv: FirmwareVolume, file_base_address: u64) -> Result<File, efi::Status> {
@@ -128,20 +128,19 @@ impl File {
     Ok(File { containing_fv, ffs_file })
   }
 
+  /// returns the file size (including header)
   pub fn file_size(&self) -> u64 {
     self.ffs_file.size()
   }
 
+  /// returns file data size (not including header)
   pub fn file_data_size(&self) -> u64 {
     self.ffs_file.size() - self.ffs_file.data_offset()
   }
 
-  pub fn file_type_raw(&self) -> u8 {
-    self.ffs_file.header().file_type
-  }
-
+  /// returns the file type
   pub fn file_type(&self) -> Option<FfsFileType> {
-    match self.file_type_raw() {
+    match self.ffs_file.header().file_type {
       FfsFileRawType::RAW => Some(FfsFileType::Raw),
       FfsFileRawType::FREEFORM => Some(FfsFileType::FreeForm),
       FfsFileRawType::SECURITY_CORE => Some(FfsFileType::SecurityCore),
@@ -165,6 +164,7 @@ impl File {
     }
   }
 
+  /// returns the FV File Attributes (see PI spec 1.8A 3.4.1.4)
   pub fn fv_file_attributes(&self) -> EfiFvFileAttributes {
     let attributes = self.ffs_file.header().attributes;
     let data_alignment = (attributes & EfiFfsFileAttributeRaw::DATA_ALIGNMENT) >> 3;
@@ -190,27 +190,28 @@ impl File {
     file_attributes as EfiFvFileAttributes
   }
 
-  pub fn file_attributes_raw(&self) -> u8 {
-    self.ffs_file.header().attributes
-  }
-
+  /// returns the GUID filename for this file
   pub fn file_name(&self) -> efi::Guid {
     self.ffs_file.header().name
   }
 
+  /// returns the base address in memory of this file
   pub fn base_address(&self) -> u64 {
     self.ffs_file.base_address()
   }
 
+  /// returns the memory address of the end of the file (not inclusive)
   pub fn top_address(&self) -> u64 {
     self.base_address() + self.file_size()
   }
 
+  /// returns the file data
   pub fn file_data(&self) -> &[u8] {
     let data_ptr = self.ffs_file.data_address() as *mut u8;
     unsafe { slice::from_raw_parts(data_ptr, self.file_data_size() as usize) }
   }
 
+  /// returns the next file in the FV, if any.
   pub fn next_ffs_file(&self) -> Option<File> {
     let mut next_file_address = self.base_address() as u64;
     next_file_address += self.file_size();
@@ -245,6 +246,7 @@ impl File {
     None
   }
 
+  /// returns the first section of the file (if any)
   pub fn first_ffs_section(&self) -> Option<Section> {
     if self.file_size() <= self.ffs_file.data_offset() as u64 {
       return None;
@@ -253,8 +255,19 @@ impl File {
     Some(first_section)
   }
 
+  /// returns an iterator over the sections of the file.
   pub fn ffs_sections(&self) -> impl Iterator<Item = Section> {
     FfsSectionIterator::new(self.first_ffs_section())
+  }
+
+  /// returns the raw file type
+  pub fn file_type_raw(&self) -> u8 {
+    self.ffs_file.header().file_type
+  }
+
+  /// returns the raw file attributes
+  pub fn file_attributes_raw(&self) -> u8 {
+    self.ffs_file.header().attributes
   }
 }
 
@@ -291,7 +304,7 @@ impl Iterator for FileIterator {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum CommonSectionHeader {
+enum CommonSectionHeader {
   Standard(&'static FfsSectionHeader::CommonSectionHeaderStandard),
   Extended(&'static FfsSectionHeader::CommonSectionHeaderExtended),
 }
@@ -346,6 +359,7 @@ impl CommonSectionHeader {
   }
 }
 
+/// Section metadata
 #[derive(Debug, Clone, Copy)]
 pub enum SectionMetaData {
   None,
@@ -355,6 +369,7 @@ pub enum SectionMetaData {
   FreeformSubtypeGuid(&'static FfsSectionHeader::FreeformSubtypeGuid),
 }
 
+/// Firmware File System (FFS) Section
 #[derive(Clone, Copy)]
 pub struct Section {
   containing_ffs: File,
@@ -364,6 +379,14 @@ pub struct Section {
 }
 
 impl Section {
+  /// Instantiate a new Section structure given the containing file and base address.
+  ///
+  /// ## Safety
+  /// Caller must ensure that base_address points to the start of a valid FFS section header and that it is safe to
+  /// access memory from the start of that header to the full length fo the section specified by that header. Caller
+  /// must also ensure that the memory containing the section data outlives this Section instance.
+  ///
+  /// Various sanity checks will be performed by this routine to ensure Section consistency.
   pub unsafe fn new(containing_ffs: File, base_address: u64) -> Result<Section, ()> {
     let header = CommonSectionHeader::new(base_address)?;
 
@@ -373,7 +396,7 @@ impl Section {
         let compression = unsafe { compression.as_ref().ok_or(())? };
         let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Compression>() as u64;
         let data = (header.base_address() + total_header) as *const u8;
-        let len: usize = (header.section_size() - total_header).try_into().unwrap();
+        let len: usize = (header.section_size() - total_header).try_into().map_err(|_| ())?;
         (SectionMetaData::Compression(compression), data, len)
       }
       FfsSectionRawType::encapsulated::GUID_DEFINED => {
@@ -381,7 +404,7 @@ impl Section {
         let guid_defined = unsafe { guid_defined.as_ref().ok_or(())? };
         let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::GuidDefined>() as u64;
         let data = (header.base_address() + total_header) as *const u8;
-        let len: usize = (header.section_size() - total_header).try_into().unwrap();
+        let len: usize = (header.section_size() - total_header).try_into().map_err(|_| ())?;
         (SectionMetaData::GuidDefined(guid_defined), data, len)
       }
       FfsSectionRawType::VERSION => {
@@ -389,7 +412,7 @@ impl Section {
         let version = unsafe { version.as_ref().ok_or(())? };
         let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Version>() as u64;
         let data = (header.base_address() + total_header) as *const u8;
-        let len: usize = (header.section_size() - total_header).try_into().unwrap();
+        let len: usize = (header.section_size() - total_header).try_into().map_err(|_| ())?;
         (SectionMetaData::Version(version), data, len)
       }
       FfsSectionRawType::FREEFORM_SUBTYPE_GUID => {
@@ -398,12 +421,12 @@ impl Section {
         let freeform_subtype = unsafe { freeform_subtype.as_ref().ok_or(())? };
         let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::FreeformSubtypeGuid>() as u64;
         let data = (header.base_address() + total_header) as *const u8;
-        let len: usize = (header.section_size() - total_header).try_into().unwrap();
+        let len: usize = (header.section_size() - total_header).try_into().map_err(|_| ())?;
         (SectionMetaData::FreeformSubtypeGuid(freeform_subtype), data, len)
       }
       _ => {
         let data = (header.base_address() + header.header_size()) as *const u8;
-        let len: usize = (header.section_size() - header.header_size()).try_into().unwrap();
+        let len: usize = (header.section_size() - header.header_size()).try_into().map_err(|_| ())?;
         (SectionMetaData::None, data, len)
       }
     };
@@ -413,14 +436,12 @@ impl Section {
     Ok(Section { containing_ffs, header, meta_data, data })
   }
 
-  pub fn is_pe32(&self) -> bool {
-    self.header.section_type() == FfsSection::Type::Pe32 as u8
-  }
-
+  /// returns the base address in memory of this section
   pub fn base_address(&self) -> u64 {
     self.header.base_address()
   }
 
+  /// returns the section type
   pub fn section_type(&self) -> Option<FfsSection::Type> {
     match self.header.section_type() {
       FfsSectionRawType::encapsulated::COMPRESSION => Some(FfsSection::Type::Compression),
@@ -442,18 +463,22 @@ impl Section {
     }
   }
 
+  /// returns the total section size (including the header and metadata, if any)
   pub fn section_size(&self) -> u64 {
     self.header.section_size()
   }
 
+  /// returns the section data
   pub fn section_data(&self) -> &[u8] {
     self.data
   }
 
+  /// returns the section metadata
   pub fn metadata(&self) -> SectionMetaData {
     self.meta_data
   }
 
+  /// returns the next section of the containing file
   pub fn next_section(&self) -> Option<Section> {
     let mut next_section_address = self.base_address();
     next_section_address += self.section_size();
