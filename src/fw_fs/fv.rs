@@ -418,6 +418,19 @@ mod unit_tests {
   }
 
   #[test]
+  fn test_firmware_volume_with_compressed_sections() -> Result<(), Box<dyn Error>> {
+    let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
+
+    let fv_bytes = fs::read(root.join("FVMAIN_COMPACT.Fv"))?;
+    let fv = unsafe { FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap() };
+
+    let expected_values =
+      serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("FVMAIN_COMPACT_expected_values.yml"))?)?;
+
+    test_firmware_volume_worker(fv_bytes, fv, expected_values)
+  }
+
+  #[test]
   fn test_malformed_firmware_volume() -> Result<(), Box<dyn Error>> {
     let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
 
