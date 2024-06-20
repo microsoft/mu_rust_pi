@@ -10,6 +10,8 @@
 //! SPDX-License-Identifier: BSD-2-Clause-Patent
 //!
 
+extern crate alloc;
+
 pub mod attributes;
 pub mod file;
 pub mod guid;
@@ -17,6 +19,7 @@ pub mod section;
 
 use core::{fmt, mem, slice};
 
+use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
 use attributes::raw::LARGE_FILE;
 use r_efi::efi;
 use section::header::{CommonSectionHeaderExtended, CommonSectionHeaderStandard};
@@ -260,6 +263,14 @@ impl File {
     FfsSectionIterator::new(self.first_ffs_section())
   }
 
+  /// returns an iterator over the sections of the file, using the section extractors from the provided vector.
+  pub fn ffs_sections_with_section_extractors(
+    &self,
+    extractors: Vec<Box<dyn SectionExtractor>>,
+  ) -> impl Iterator<Item = Section> {
+    FfsSectionIteratorWithExtractors::new(self.first_ffs_section(), extractors)
+  }
+
   /// returns the raw file type
   pub fn file_type_raw(&self) -> u8 {
     self.ffs_file.header().file_type
@@ -301,6 +312,10 @@ impl Iterator for FileIterator {
     self.next_ffs = current.next_ffs_file();
     Some(current)
   }
+}
+
+pub trait SectionExtractor {
+  fn extract(&self, section: Section) -> Vec<Section>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -480,6 +495,11 @@ impl Section {
     self.meta_data
   }
 
+  pub fn is_encapsulated(&self) -> bool {
+    self.section_type() == Some(FfsSection::Type::Compression)
+      || self.section_type() == Some(FfsSection::Type::GuidDefined)
+  }
+
   /// returns the next section of the containing file
   pub fn next_section(&self) -> Option<Section> {
     let mut next_section_address = self.base_address();
@@ -523,5 +543,59 @@ impl Iterator for FfsSectionIterator {
     let current = self.next_section?;
     self.next_section = current.next_section();
     Some(current)
+  }
+}
+
+struct FfsSectionIteratorWithExtractors {
+  next_section: Option<Section>,
+  extractors: Vec<Box<dyn SectionExtractor>>,
+  pending_encapsulated_sections: VecDeque<Section>,
+}
+
+impl FfsSectionIteratorWithExtractors {
+  pub fn new(
+    start_section: Option<Section>,
+    extractors: Vec<Box<dyn SectionExtractor>>,
+  ) -> FfsSectionIteratorWithExtractors {
+    FfsSectionIteratorWithExtractors {
+      next_section: start_section,
+      extractors,
+      pending_encapsulated_sections: VecDeque::new(),
+    }
+  }
+}
+
+impl Iterator for FfsSectionIteratorWithExtractors {
+  type Item = Section;
+  fn next(&mut self) -> Option<Section> {
+    let current = {
+      if self.pending_encapsulated_sections.is_empty() {
+        let current = self.next_section?;
+        self.next_section = current.next_section();
+        Some(current)
+      } else {
+        self.pending_encapsulated_sections.pop_front()
+      }
+    };
+
+    if let Some(section) = &current {
+      if section.is_encapsulated() {
+        //Only one extractor is permitted to extract the section; the first one that succeeds in producing sections
+        //will be used and further extractors will not be attempted.
+        if let Some(extracted_sections) = self.extractors.iter().find_map(|extractor| {
+          let sections = extractor.extract(*section);
+          if sections.is_empty() {
+            None
+          } else {
+            Some(sections)
+          }
+        }) {
+          for section in extracted_sections {
+            self.pending_encapsulated_sections.push_front(section);
+          }
+        }
+      }
+    }
+    current
   }
 }
