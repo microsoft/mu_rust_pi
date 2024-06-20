@@ -15,11 +15,7 @@ pub mod file;
 pub mod guid;
 pub mod section;
 
-use core::{
-  fmt,
-  mem::{self, size_of, size_of_val},
-  slice,
-};
+use core::{fmt, mem, slice};
 
 use attributes::raw::LARGE_FILE;
 use r_efi::efi;
@@ -56,6 +52,7 @@ impl FfsFileHeader {
       Self::Extended(header) => &header.header,
     }
   }
+
   fn size(&self) -> u64 {
     match self {
       Self::Standard(header) => {
@@ -69,22 +66,22 @@ impl FfsFileHeader {
     }
   }
 
-  fn data_offset(&self) -> u64 {
+  fn data_offset(&self) -> usize {
     match self {
-      Self::Standard(_) => mem::size_of::<file::Header>() as u64,
-      Self::Extended(_) => mem::size_of::<file::Header2>() as u64,
+      Self::Standard(_) => mem::size_of::<file::Header>(),
+      Self::Extended(_) => mem::size_of::<file::Header2>(),
     }
   }
 
-  fn base_address(&self) -> u64 {
+  fn base_address(&self) -> efi::PhysicalAddress {
     match self {
-      Self::Standard(header) => *header as *const file::Header as u64,
-      Self::Extended(header2) => *header2 as *const file::Header2 as u64,
+      Self::Standard(header) => *header as *const file::Header as efi::PhysicalAddress,
+      Self::Extended(header2) => *header2 as *const file::Header2 as efi::PhysicalAddress,
     }
   }
 
-  fn data_address(&self) -> u64 {
-    self.base_address() + self.data_offset()
+  fn data_address(&self) -> efi::PhysicalAddress {
+    self.base_address() + self.data_offset() as u64
   }
 }
 
@@ -115,7 +112,10 @@ impl File {
   /// ensure that the memory containing the file data outlives this File instance.
   ///
   /// Various sanity checks will be performed by this routine to ensure File consistency.
-  pub unsafe fn new(containing_fv: FirmwareVolume, file_base_address: u64) -> Result<File, efi::Status> {
+  pub unsafe fn new(
+    containing_fv: FirmwareVolume,
+    file_base_address: efi::PhysicalAddress,
+  ) -> Result<File, efi::Status> {
     if file_base_address < containing_fv.base_address() || containing_fv.top_address() <= file_base_address {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
@@ -123,7 +123,7 @@ impl File {
     let ffs_file = file_base_address as *const file::Header;
     let ffs_file = ffs_file.as_ref().ok_or(efi::Status::INVALID_PARAMETER)?;
 
-    let ffs_file = ffs_file.try_into().map_err(|_| efi::Status::INVALID_PARAMETER)?;
+    let ffs_file = ffs_file.into();
 
     Ok(File { containing_fv, ffs_file })
   }
@@ -135,7 +135,7 @@ impl File {
 
   /// returns file data size (not including header)
   pub fn file_data_size(&self) -> u64 {
-    self.ffs_file.size() - self.ffs_file.data_offset()
+    self.ffs_file.size() - self.ffs_file.data_offset() as u64
   }
 
   /// returns the file type
@@ -181,7 +181,7 @@ impl File {
       (5, false) => 12,
       (6, false) => 15,
       (7, false) => 16,
-      (x, true) if (0..8).contains(&x) => (17 + x) as u32,
+      (x @ 0..=7, true) => (17 + x) as u32,
       (_, _) => panic!("Invalid data_alignment!"),
     };
     if attributes & EfiFfsFileAttributeRaw::FIXED != 0 {
@@ -196,12 +196,12 @@ impl File {
   }
 
   /// returns the base address in memory of this file
-  pub fn base_address(&self) -> u64 {
+  pub fn base_address(&self) -> efi::PhysicalAddress {
     self.ffs_file.base_address()
   }
 
   /// returns the memory address of the end of the file (not inclusive)
-  pub fn top_address(&self) -> u64 {
+  pub fn top_address(&self) -> efi::PhysicalAddress {
     self.base_address() + self.file_size()
   }
 
@@ -213,7 +213,7 @@ impl File {
 
   /// returns the next file in the FV, if any.
   pub fn next_ffs_file(&self) -> Option<File> {
-    let mut next_file_address = self.base_address() as u64;
+    let mut next_file_address = self.base_address();
     next_file_address += self.file_size();
 
     // per the PI spec, "Given a file F, the next file FvHeader is located at the next 8-byte aligned firmware volume
@@ -224,12 +224,12 @@ impl File {
     // check to see if we ran off the end of the FV yet.
     let erase_byte: [u8; 1] =
       if self.containing_fv.attributes() & Fvb2RawAttributes::ERASE_POLARITY != 0 { [0xFF] } else { [0] };
-    let remaining_space = self.containing_fv.top_address() - size_of::<FvHeader>() as u64;
+    let remaining_space = self.containing_fv.top_address() - mem::size_of::<FvHeader>() as efi::PhysicalAddress;
     if next_file_address <= remaining_space {
-      let test_size = size_of::<FvHeader>().min(remaining_space.try_into().unwrap());
+      let test_size = mem::size_of::<FvHeader>().min(remaining_space.try_into().unwrap());
       let remaining_space_slice = unsafe { slice::from_raw_parts(next_file_address as *const u8, test_size) };
 
-      if remaining_space_slice.windows(size_of_val(&erase_byte)).all(|window| window == erase_byte) {
+      if remaining_space_slice.windows(mem::size_of_val(&erase_byte)).all(|window| window == erase_byte) {
         // No files are left, only erased bytes
         return None;
       }
@@ -310,18 +310,17 @@ enum CommonSectionHeader {
 }
 
 impl CommonSectionHeader {
-  unsafe fn new(base_address: u64) -> Result<CommonSectionHeader, ()> {
-    let common_hdr_ptr =
-      unsafe { (base_address as *const FfsSectionHeader::CommonSectionHeaderStandard).as_ref().ok_or(())? };
+  unsafe fn new(base_address: efi::PhysicalAddress) -> Result<CommonSectionHeader, ()> {
+    let common_hdr_ptr = (base_address as *const FfsSectionHeader::CommonSectionHeaderStandard).as_ref().ok_or(())?;
 
     let size = &common_hdr_ptr.size;
 
     if size.iter().all(|x| *x == 0xff) {
       let extended_hdr_ptr =
-        unsafe { (base_address as *const FfsSectionHeader::CommonSectionHeaderExtended).as_ref().ok_or(())? };
-      Ok(CommonSectionHeader::Extended(&extended_hdr_ptr))
+        (base_address as *const FfsSectionHeader::CommonSectionHeaderExtended).as_ref().ok_or(())?;
+      Ok(CommonSectionHeader::Extended(extended_hdr_ptr))
     } else {
-      Ok(CommonSectionHeader::Standard(&common_hdr_ptr))
+      Ok(CommonSectionHeader::Standard(common_hdr_ptr))
     }
   }
 
@@ -332,29 +331,29 @@ impl CommonSectionHeader {
     }
   }
 
-  fn section_size(&self) -> u64 {
+  fn section_size(&self) -> usize {
     match self {
       CommonSectionHeader::Standard(header) => {
         let mut size_bytes = header.size.to_vec();
         size_bytes.push(0);
         let size: u32 = u32::from_le_bytes(size_bytes.try_into().unwrap());
-        size as u64
+        size as usize
       }
-      CommonSectionHeader::Extended(header) => header.extended_size as u64,
+      CommonSectionHeader::Extended(header) => header.extended_size as usize,
     }
   }
 
-  fn base_address(&self) -> u64 {
+  fn base_address(&self) -> efi::PhysicalAddress {
     match *self {
-      CommonSectionHeader::Standard(header) => header as *const _ as u64,
-      CommonSectionHeader::Extended(header) => header as *const _ as u64,
+      CommonSectionHeader::Standard(header) => header as *const _ as efi::PhysicalAddress,
+      CommonSectionHeader::Extended(header) => header as *const _ as efi::PhysicalAddress,
     }
   }
 
-  fn header_size(&self) -> u64 {
+  fn header_size(&self) -> usize {
     match self {
-      CommonSectionHeader::Standard(_) => mem::size_of::<CommonSectionHeaderStandard>() as u64,
-      CommonSectionHeader::Extended(_) => mem::size_of::<CommonSectionHeaderExtended>() as u64,
+      CommonSectionHeader::Standard(_) => mem::size_of::<CommonSectionHeaderStandard>(),
+      CommonSectionHeader::Extended(_) => mem::size_of::<CommonSectionHeaderExtended>(),
     }
   }
 }
@@ -387,46 +386,49 @@ impl Section {
   /// must also ensure that the memory containing the section data outlives this Section instance.
   ///
   /// Various sanity checks will be performed by this routine to ensure Section consistency.
-  pub unsafe fn new(containing_ffs: File, base_address: u64) -> Result<Section, ()> {
-    let header = CommonSectionHeader::new(base_address)?;
+  pub unsafe fn new(containing_ffs: File, base_address: efi::PhysicalAddress) -> Result<Section, efi::Status> {
+    let header = CommonSectionHeader::new(base_address).map_err(|_| efi::Status::INVALID_PARAMETER)?;
 
     let (meta_data, data, len) = match header.section_type() {
       FfsSectionRawType::encapsulated::COMPRESSION => {
-        let compression = (header.base_address() + header.header_size()) as *const FfsSectionHeader::Compression;
-        let compression = unsafe { compression.as_ref().ok_or(())? };
-        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Compression>() as u64;
-        let data = (header.base_address() + total_header) as *const u8;
-        let len: usize = (header.section_size() - total_header).try_into().map_err(|_| ())?;
+        let compression = (header.base_address() + header.header_size() as efi::PhysicalAddress)
+          as *const FfsSectionHeader::Compression;
+        let compression = unsafe { compression.as_ref().ok_or(efi::Status::INVALID_PARAMETER)? };
+        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Compression>();
+        let data = (header.base_address() + total_header as efi::PhysicalAddress) as *const u8;
+        let len = header.section_size() - total_header;
         (SectionMetaData::Compression(compression), data, len)
       }
       FfsSectionRawType::encapsulated::GUID_DEFINED => {
-        let guid_defined = (header.base_address() + header.header_size()) as *const FfsSectionHeader::GuidDefined;
-        let guid_defined = unsafe { guid_defined.as_ref().ok_or(())? };
-        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::GuidDefined>() as u64;
-        let data = (header.base_address() + total_header) as *const u8;
-        let len: usize = (header.section_size() - total_header).try_into().map_err(|_| ())?;
+        let guid_defined = (header.base_address() + header.header_size() as efi::PhysicalAddress)
+          as *const FfsSectionHeader::GuidDefined;
+        let guid_defined = unsafe { guid_defined.as_ref().ok_or(efi::Status::INVALID_PARAMETER)? };
+        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::GuidDefined>();
+        let data = (header.base_address() + total_header as efi::PhysicalAddress) as *const u8;
+        let len = header.section_size() - total_header;
         (SectionMetaData::GuidDefined(guid_defined), data, len)
       }
       FfsSectionRawType::VERSION => {
-        let version = (header.base_address() + header.header_size()) as *const FfsSectionHeader::Version;
-        let version = unsafe { version.as_ref().ok_or(())? };
-        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Version>() as u64;
-        let data = (header.base_address() + total_header) as *const u8;
-        let len: usize = (header.section_size() - total_header).try_into().map_err(|_| ())?;
+        let version =
+          (header.base_address() + header.header_size() as efi::PhysicalAddress) as *const FfsSectionHeader::Version;
+        let version = unsafe { version.as_ref().ok_or(efi::Status::INVALID_PARAMETER)? };
+        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Version>();
+        let data = (header.base_address() + total_header as efi::PhysicalAddress) as *const u8;
+        let len = header.section_size() - total_header;
         (SectionMetaData::Version(version), data, len)
       }
       FfsSectionRawType::FREEFORM_SUBTYPE_GUID => {
-        let freeform_subtype =
-          (header.base_address() + header.header_size()) as *const FfsSectionHeader::FreeformSubtypeGuid;
-        let freeform_subtype = unsafe { freeform_subtype.as_ref().ok_or(())? };
-        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::FreeformSubtypeGuid>() as u64;
-        let data = (header.base_address() + total_header) as *const u8;
-        let len: usize = (header.section_size() - total_header).try_into().map_err(|_| ())?;
+        let freeform_subtype = (header.base_address() + header.header_size() as efi::PhysicalAddress)
+          as *const FfsSectionHeader::FreeformSubtypeGuid;
+        let freeform_subtype = unsafe { freeform_subtype.as_ref().ok_or(efi::Status::INVALID_PARAMETER)? };
+        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::FreeformSubtypeGuid>();
+        let data = (header.base_address() + total_header as efi::PhysicalAddress) as *const u8;
+        let len = header.section_size() - total_header;
         (SectionMetaData::FreeformSubtypeGuid(freeform_subtype), data, len)
       }
       _ => {
-        let data = (header.base_address() + header.header_size()) as *const u8;
-        let len: usize = (header.section_size() - header.header_size()).try_into().map_err(|_| ())?;
+        let data = (header.base_address() + header.header_size() as efi::PhysicalAddress) as *const u8;
+        let len = header.section_size() - header.header_size();
         (SectionMetaData::None, data, len)
       }
     };
@@ -437,7 +439,7 @@ impl Section {
   }
 
   /// returns the base address in memory of this section
-  pub fn base_address(&self) -> u64 {
+  pub fn base_address(&self) -> efi::PhysicalAddress {
     self.header.base_address()
   }
 
@@ -464,7 +466,7 @@ impl Section {
   }
 
   /// returns the total section size (including the header and metadata, if any)
-  pub fn section_size(&self) -> u64 {
+  pub fn section_size(&self) -> usize {
     self.header.section_size()
   }
 
@@ -481,7 +483,7 @@ impl Section {
   /// returns the next section of the containing file
   pub fn next_section(&self) -> Option<Section> {
     let mut next_section_address = self.base_address();
-    next_section_address += self.section_size();
+    next_section_address += self.section_size() as efi::PhysicalAddress;
 
     // per the PI spec, "The section headers aligned on 4 byte boundaries relative to the start of the file's image"
     // but, in fact, that just means "4-byte aligned" per the EDK2 implementation.
@@ -489,7 +491,8 @@ impl Section {
 
     // check to see if we ran off the end of the file yet.
     if next_section_address
-      <= (self.containing_ffs.top_address() - mem::size_of::<FfsSectionHeader::CommonSectionHeaderStandard>() as u64)
+      <= (self.containing_ffs.top_address()
+        - mem::size_of::<FfsSectionHeader::CommonSectionHeaderStandard>() as efi::PhysicalAddress)
     {
       let next_section = unsafe { Section::new(self.containing_ffs, next_section_address).ok()? };
       return Some(next_section);

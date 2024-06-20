@@ -112,8 +112,8 @@ impl FirmwareVolume {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
-    // checksum: fv header must sum to zero (and must be multiple of u16 bytes)
-    if (*fv_header).header_length % (mem::size_of::<u16>() as u16) != 0 {
+    // checksum: fv header must sum to zero (and must be multiple of 2 bytes)
+    if (*fv_header).header_length & 0x01 != 0 {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
     let header_size = (*fv_header).header_length / (mem::size_of::<u16>() as u16);
@@ -150,11 +150,12 @@ impl FirmwareVolume {
   }
 
   fn ext_header(&self) -> Option<&'static ExtHeader> {
-    let ext_header_offset = self.fv_header.ext_header_offset as u64;
-    if ext_header_offset == 0 {
+    if self.fv_header.ext_header_offset == 0 {
       return None;
     }
-    unsafe { ((self.base_address() + ext_header_offset) as *const ExtHeader).as_ref() }
+    unsafe {
+      ((self.base_address() + self.fv_header.ext_header_offset as efi::PhysicalAddress) as *const ExtHeader).as_ref()
+    }
   }
 
   fn block_map(&self) -> &'static [BlockMapEntry] {
@@ -182,19 +183,19 @@ impl FirmwareVolume {
 
   /// Returns the first file in the Firmware Volume
   pub fn first_ffs_file(&self) -> Option<FfsFile> {
-    let mut ffs_address = self.fv_header as *const Header as u64;
+    let mut ffs_address = self.base_address();
     if let Some(ext_header) = self.ext_header() {
       // if ext header exists, then file starts after ext header
-      ffs_address += self.fv_header.ext_header_offset as u64;
-      ffs_address += ext_header.ext_header_size as u64;
+      ffs_address += self.fv_header.ext_header_offset as efi::PhysicalAddress;
+      ffs_address += ext_header.ext_header_size as efi::PhysicalAddress;
     } else {
       // otherwise the file starts after the main header.
-      ffs_address += self.fv_header.header_length as u64
+      ffs_address += self.fv_header.header_length as efi::PhysicalAddress
     }
     ffs_address = align_up(ffs_address, 0x8);
 
     //Check the case where the FV contains no files.
-    if ffs_address + mem::size_of::<FfsFileHeader>() as u64 >= self.top_address() {
+    if ffs_address + mem::size_of::<FfsFileHeader>() as efi::PhysicalAddress >= self.top_address() {
       None
     } else {
       unsafe { FfsFile::new(*self, ffs_address).ok() }
@@ -222,7 +223,7 @@ impl FirmwareVolume {
   }
 
   /// returns the (linear block offset from FV base, block_size, remaining_blocks) given an LBA.
-  pub fn get_lba_info(&self, lba: u32) -> Result<(u32, u32, u32), ()> {
+  pub fn get_lba_info(&self, lba: u32) -> Result<(u32, u32, u32), efi::Status> {
     let block_map = self.block_map();
 
     let mut total_blocks = 0;
@@ -239,7 +240,7 @@ impl FirmwareVolume {
     }
 
     if lba >= total_blocks {
-      return Err(()); //lba out of range.
+      return Err(efi::Status::INVALID_PARAMETER); //lba out of range.
     }
 
     let remaining_blocks = total_blocks - lba;
@@ -327,7 +328,7 @@ mod unit_tests {
       if let Some(mut target) = expected_values.files_to_test.remove(&file_name) {
         assert_eq!(
           target.base_address,
-          ffs_file.base_address() - fv_bytes.as_ptr() as u64,
+          ffs_file.base_address() - fv_bytes.as_ptr() as efi::PhysicalAddress,
           "[{file_name}] Error with the file Base Address"
         );
         assert_eq!(target.file_type, ffs_file.file_type_raw(), "[{file_name}] Error with the file type.");
@@ -348,7 +349,7 @@ mod unit_tests {
           if let Some(target) = target.sections.remove(&idx) {
             assert_eq!(
               target.base_address,
-              section.base_address() - fv_bytes.as_ptr() as u64,
+              section.base_address() - fv_bytes.as_ptr() as efi::PhysicalAddress,
               "[{file_name}, section: {idx}] Error with the section Base Address"
             );
             assert_eq!(
@@ -358,7 +359,7 @@ mod unit_tests {
             );
             assert_eq!(
               target.size,
-              section.section_size(),
+              section.section_size() as u64,
               "[{file_name}, section: {idx}] Error with the section Size"
             );
             assert_eq!(
