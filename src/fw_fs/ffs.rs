@@ -264,10 +264,10 @@ impl File {
   }
 
   /// returns an iterator over the sections of the file, using the section extractors from the provided vector.
-  pub fn ffs_sections_with_section_extractors(
-    &self,
-    extractors: Vec<Box<dyn SectionExtractor>>,
-  ) -> impl Iterator<Item = Section> {
+  pub fn ffs_sections_with_section_extractors<'a>(
+    &'a self,
+    extractors: &'a [Box<dyn SectionExtractor>],
+  ) -> impl Iterator<Item = Section> + 'a {
     FfsSectionIteratorWithExtractors::new(self.first_ffs_section(), extractors)
   }
 
@@ -279,6 +279,10 @@ impl File {
   /// returns the raw file attributes
   pub fn file_attributes_raw(&self) -> u8 {
     self.ffs_file.header().attributes
+  }
+
+  pub fn containing_fv_base(&self) -> efi::PhysicalAddress {
+    self.containing_fv.base_address()
   }
 }
 
@@ -315,7 +319,7 @@ impl Iterator for FileIterator {
 }
 
 pub trait SectionExtractor {
-  fn extract(&self, section: Section) -> Vec<Section>;
+  fn extract(&self, section: Section, extractors: &[Box<dyn SectionExtractor>]) -> Vec<Section>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -387,6 +391,7 @@ pub enum SectionMetaData {
 #[derive(Clone, Copy)]
 pub struct Section {
   containing_ffs: File,
+  containing_extraction_buffer: Option<&'static [u8]>,
   header: CommonSectionHeader,
   meta_data: SectionMetaData,
   data: &'static [u8],
@@ -450,12 +455,40 @@ impl Section {
 
     let data = unsafe { slice::from_raw_parts(data, len) };
 
-    Ok(Section { containing_ffs, header, meta_data, data })
+    Ok(Section { containing_ffs, containing_extraction_buffer: None, header, meta_data, data })
+  }
+
+  /// Instantiate a new Section structure given the containing file and base address that is part of an extracted
+  /// section.
+  ///
+  /// ## Safety
+  /// Caller must ensure that base_address points to the start of a valid FFS section header and that it is safe to
+  /// access memory from the start of that header to the full length fo the section specified by that header. Caller
+  /// must also ensure that the memory containing the section data outlives this Section instance.
+  ///
+  /// Various sanity checks will be performed by this routine to ensure Section consistency.
+  pub unsafe fn new_in_extraction_buffer(
+    containing_ffs: File,
+    base_address: efi::PhysicalAddress,
+    extraction_buffer: &'static [u8],
+  ) -> Result<Section, efi::Status> {
+    let mut section = Self::new(containing_ffs, base_address)?;
+    section.containing_extraction_buffer = Some(extraction_buffer);
+    Ok(section)
   }
 
   /// returns the base address in memory of this section
   pub fn base_address(&self) -> efi::PhysicalAddress {
     self.header.base_address()
+  }
+
+  #[cfg(test)]
+  pub fn container_offset(&self) -> usize {
+    if let Some(container_buffer) = self.containing_extraction_buffer {
+      (self.base_address() - container_buffer.as_ptr() as efi::PhysicalAddress) as usize
+    } else {
+      (self.base_address() - self.containing_ffs.containing_fv_base()) as usize
+    }
   }
 
   /// returns the section type
@@ -500,6 +533,10 @@ impl Section {
       || self.section_type() == Some(FfsSection::Type::GuidDefined)
   }
 
+  pub fn containing_ffs(&self) -> File {
+    self.containing_ffs
+  }
+
   /// returns the next section of the containing file
   pub fn next_section(&self) -> Option<Section> {
     let mut next_section_address = self.base_address();
@@ -509,12 +546,17 @@ impl Section {
     // but, in fact, that just means "4-byte aligned" per the EDK2 implementation.
     next_section_address = align_up(next_section_address, 0x4);
 
-    // check to see if we ran off the end of the file yet.
+    // check to see if we ran off the end of the file or containing extraction buffer yet.
+    let top_address = match self.containing_extraction_buffer {
+      Some(buffer) => buffer.as_ptr() as efi::PhysicalAddress + buffer.len() as efi::PhysicalAddress,
+      None => self.containing_ffs().top_address(),
+    };
+
     if next_section_address
-      <= (self.containing_ffs.top_address()
-        - mem::size_of::<FfsSectionHeader::CommonSectionHeaderStandard>() as efi::PhysicalAddress)
+      <= (top_address - mem::size_of::<FfsSectionHeader::CommonSectionHeaderStandard>() as efi::PhysicalAddress)
     {
-      let next_section = unsafe { Section::new(self.containing_ffs, next_section_address).ok()? };
+      let mut next_section = unsafe { Section::new(self.containing_ffs, next_section_address).ok()? };
+      next_section.containing_extraction_buffer = self.containing_extraction_buffer;
       return Some(next_section);
     }
     None
@@ -523,11 +565,11 @@ impl Section {
 
 impl fmt::Debug for Section {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "Section @{:#x} header: {:x?} size: 0x{:#x}", self.base_address(), self.header, self.section_size())
+    write!(f, "Section @{:#x} type: {:x?} size: {:#x}", self.base_address(), self.section_type(), self.section_size())
   }
 }
 
-struct FfsSectionIterator {
+pub struct FfsSectionIterator {
   next_section: Option<Section>,
 }
 
@@ -546,16 +588,16 @@ impl Iterator for FfsSectionIterator {
   }
 }
 
-struct FfsSectionIteratorWithExtractors {
+pub struct FfsSectionIteratorWithExtractors<'a> {
   next_section: Option<Section>,
-  extractors: Vec<Box<dyn SectionExtractor>>,
+  extractors: &'a [Box<dyn SectionExtractor>],
   pending_encapsulated_sections: VecDeque<Section>,
 }
 
-impl FfsSectionIteratorWithExtractors {
+impl<'a> FfsSectionIteratorWithExtractors<'a> {
   pub fn new(
     start_section: Option<Section>,
-    extractors: Vec<Box<dyn SectionExtractor>>,
+    extractors: &[Box<dyn SectionExtractor>],
   ) -> FfsSectionIteratorWithExtractors {
     FfsSectionIteratorWithExtractors {
       next_section: start_section,
@@ -565,7 +607,7 @@ impl FfsSectionIteratorWithExtractors {
   }
 }
 
-impl Iterator for FfsSectionIteratorWithExtractors {
+impl<'a> Iterator for FfsSectionIteratorWithExtractors<'a> {
   type Item = Section;
   fn next(&mut self) -> Option<Section> {
     let current = {
@@ -583,14 +625,14 @@ impl Iterator for FfsSectionIteratorWithExtractors {
         //Only one extractor is permitted to extract the section; the first one that succeeds in producing sections
         //will be used and further extractors will not be attempted.
         if let Some(extracted_sections) = self.extractors.iter().find_map(|extractor| {
-          let sections = extractor.extract(*section);
+          let sections = extractor.extract(*section, self.extractors);
           if sections.is_empty() {
             None
           } else {
             Some(sections)
           }
         }) {
-          for section in extracted_sections {
+          for section in extracted_sections.into_iter().rev() {
             self.pending_encapsulated_sections.push_front(section);
           }
         }

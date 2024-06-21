@@ -279,7 +279,9 @@ mod unit_tests {
   use uuid::Uuid;
 
   use crate::fw_fs::{
-    ffs::{file::raw::r#type as FfsRawFileType, section::Type as FfsSectionType, Section as FfsSection},
+    ffs::{
+      file::raw::r#type as FfsRawFileType, section::Type as FfsSectionType, Section as FfsSection, SectionExtractor,
+    },
     fv::{BlockMapEntry, FirmwareVolume},
   };
 
@@ -319,12 +321,13 @@ mod unit_tests {
     fv_bytes: Vec<u8>,
     fv: FirmwareVolume,
     mut expected_values: TargetValues,
+    extractors: &Vec<Box<dyn SectionExtractor>>,
   ) -> Result<(), Box<dyn Error>> {
     let mut count = 0;
     for ffs_file in fv.ffs_files() {
       count += 1;
       let file_name = Uuid::from_bytes_le(*ffs_file.file_name().as_bytes()).to_string().to_uppercase();
-      let sections = ffs_file.ffs_sections().collect::<Vec<_>>();
+      let sections = ffs_file.ffs_sections_with_section_extractors(extractors).collect::<Vec<_>>();
       if let Some(mut target) = expected_values.files_to_test.remove(&file_name) {
         assert_eq!(
           target.base_address,
@@ -339,6 +342,9 @@ mod unit_tests {
           ffs_file.file_data_size() as usize,
           "[{file_name}] Error with the file data size (Body size)."
         );
+        for section in sections.iter().enumerate() {
+          println!("{:x?}", section);
+        }
         assert_eq!(
           target.number_of_sections,
           sections.len(),
@@ -349,7 +355,7 @@ mod unit_tests {
           if let Some(target) = target.sections.remove(&idx) {
             assert_eq!(
               target.base_address,
-              section.base_address() - fv_bytes.as_ptr() as efi::PhysicalAddress,
+              section.container_offset() as efi::PhysicalAddress,
               "[{file_name}, section: {idx}] Error with the section Base Address"
             );
             assert_eq!(
@@ -401,7 +407,7 @@ mod unit_tests {
     let expected_values =
       serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("DXEFV_expected_values.yml"))?)?;
 
-    test_firmware_volume_worker(fv_bytes, fv, expected_values)
+    test_firmware_volume_worker(fv_bytes, fv, expected_values, &Vec::new())
   }
 
   #[test]
@@ -414,20 +420,7 @@ mod unit_tests {
     let expected_values =
       serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("GIGANTOR_expected_values.yml"))?)?;
 
-    test_firmware_volume_worker(fv_bytes, fv, expected_values)
-  }
-
-  #[test]
-  fn test_firmware_volume_with_compressed_sections() -> Result<(), Box<dyn Error>> {
-    let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
-
-    let fv_bytes = fs::read(root.join("FVMAIN_COMPACT.Fv"))?;
-    let fv = unsafe { FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap() };
-
-    let expected_values =
-      serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("FVMAIN_COMPACT_expected_values.yml"))?)?;
-
-    test_firmware_volume_worker(fv_bytes, fv, expected_values)
+    test_firmware_volume_worker(fv_bytes, fv, expected_values, &Vec::new())
   }
 
   #[test]

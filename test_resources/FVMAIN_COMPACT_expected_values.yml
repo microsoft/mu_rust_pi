@@ -10,18 +10,27 @@ files_to_test:
     # Full size in UEFITool
     size: 0x3185B1
     # Number of section that the file has
-    number_of_sections: 3
+    number_of_sections: 5
     sections:
       # Index of the section in the file (Not required to defined every section)
       0:
         section_type: "GuidDefined"
         base_address: 0x90
         size: 0x318599
+      # Brotli Compressed Sections contained in Section 0. Base and Size are relative to the decompressed buffer.
       1:
-        section_type: "FirmwareVolumeImage"
-        base_address: 0x14CAD4
-        size: 0x14
+        section_type: "Raw"
+        base_address: 0x0
+        size: 0x7C
       2:
         section_type: "FirmwareVolumeImage"
-        base_address: 0x14CAE8
-        size: 0xE
+        base_address: 0x7C
+        size: 0xE0004
+      3:
+        section_type: "Raw"
+        base_address: 0xE0080
+        size: 0x7C
+      4:
+        section_type: "FirmwareVolumeImage"
+        base_address: 0xE00FC
+        size: 0xC00004
