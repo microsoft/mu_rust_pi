@@ -264,11 +264,11 @@ impl File {
   }
 
   /// returns an iterator over the sections of the file, using the section extractors from the provided vector.
-  pub fn ffs_sections_with_section_extractors<'a>(
-    &'a self,
-    extractors: &'a [Box<dyn SectionExtractor>],
-  ) -> impl Iterator<Item = Section> + 'a {
-    FfsSectionIteratorWithExtractors::new(self.first_ffs_section(), extractors)
+  pub fn ffs_sections_with_section_extractors(
+    &self,
+    extractor: Box<dyn SectionExtractor>,
+  ) -> impl Iterator<Item = Section> {
+    FfsSectionIteratorWithExtractors::new(self.first_ffs_section(), extractor)
   }
 
   /// returns the raw file type
@@ -319,7 +319,7 @@ impl Iterator for FileIterator {
 }
 
 pub trait SectionExtractor {
-  fn extract(&self, section: Section, extractors: &[Box<dyn SectionExtractor>]) -> Vec<Section>;
+  fn extract(&self, section: Section) -> Vec<Section>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -588,26 +588,23 @@ impl Iterator for FfsSectionIterator {
   }
 }
 
-pub struct FfsSectionIteratorWithExtractors<'a> {
+pub struct FfsSectionIteratorWithExtractors {
   next_section: Option<Section>,
-  extractors: &'a [Box<dyn SectionExtractor>],
+  extractor: Box<dyn SectionExtractor>,
   pending_encapsulated_sections: VecDeque<Section>,
 }
 
-impl<'a> FfsSectionIteratorWithExtractors<'a> {
-  pub fn new(
-    start_section: Option<Section>,
-    extractors: &[Box<dyn SectionExtractor>],
-  ) -> FfsSectionIteratorWithExtractors {
+impl FfsSectionIteratorWithExtractors {
+  pub fn new(start_section: Option<Section>, extractor: Box<dyn SectionExtractor>) -> FfsSectionIteratorWithExtractors {
     FfsSectionIteratorWithExtractors {
       next_section: start_section,
-      extractors,
+      extractor,
       pending_encapsulated_sections: VecDeque::new(),
     }
   }
 }
 
-impl<'a> Iterator for FfsSectionIteratorWithExtractors<'a> {
+impl Iterator for FfsSectionIteratorWithExtractors {
   type Item = Section;
   fn next(&mut self) -> Option<Section> {
     let current = {
@@ -622,19 +619,9 @@ impl<'a> Iterator for FfsSectionIteratorWithExtractors<'a> {
 
     if let Some(section) = &current {
       if section.is_encapsulated() {
-        //Only one extractor is permitted to extract the section; the first one that succeeds in producing sections
-        //will be used and further extractors will not be attempted.
-        if let Some(extracted_sections) = self.extractors.iter().find_map(|extractor| {
-          let sections = extractor.extract(*section, self.extractors);
-          if sections.is_empty() {
-            None
-          } else {
-            Some(sections)
-          }
-        }) {
-          for section in extracted_sections.into_iter().rev() {
-            self.pending_encapsulated_sections.push_front(section);
-          }
+        let extracted_sections = self.extractor.extract(*section);
+        for section in extracted_sections.into_iter().rev() {
+          self.pending_encapsulated_sections.push_front(section);
         }
       }
     }

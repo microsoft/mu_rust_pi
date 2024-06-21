@@ -279,9 +279,7 @@ mod unit_tests {
   use uuid::Uuid;
 
   use crate::fw_fs::{
-    ffs::{
-      file::raw::r#type as FfsRawFileType, section::Type as FfsSectionType, Section as FfsSection, SectionExtractor,
-    },
+    ffs::{file::raw::r#type as FfsRawFileType, section::Type as FfsSectionType, Section as FfsSection},
     fv::{BlockMapEntry, FirmwareVolume},
   };
 
@@ -321,13 +319,12 @@ mod unit_tests {
     fv_bytes: Vec<u8>,
     fv: FirmwareVolume,
     mut expected_values: TargetValues,
-    extractors: &Vec<Box<dyn SectionExtractor>>,
   ) -> Result<(), Box<dyn Error>> {
     let mut count = 0;
     for ffs_file in fv.ffs_files() {
       count += 1;
       let file_name = Uuid::from_bytes_le(*ffs_file.file_name().as_bytes()).to_string().to_uppercase();
-      let sections = ffs_file.ffs_sections_with_section_extractors(extractors).collect::<Vec<_>>();
+      let sections = ffs_file.ffs_sections().collect::<Vec<_>>();
       if let Some(mut target) = expected_values.files_to_test.remove(&file_name) {
         assert_eq!(
           target.base_address,
@@ -407,7 +404,7 @@ mod unit_tests {
     let expected_values =
       serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("DXEFV_expected_values.yml"))?)?;
 
-    test_firmware_volume_worker(fv_bytes, fv, expected_values, &Vec::new())
+    test_firmware_volume_worker(fv_bytes, fv, expected_values)
   }
 
   #[test]
@@ -420,7 +417,7 @@ mod unit_tests {
     let expected_values =
       serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("GIGANTOR_expected_values.yml"))?)?;
 
-    test_firmware_volume_worker(fv_bytes, fv, expected_values, &Vec::new())
+    test_firmware_volume_worker(fv_bytes, fv, expected_values)
   }
 
   #[test]

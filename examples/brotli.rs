@@ -45,10 +45,11 @@ impl<T: Clone> alloc_no_stdlib::Allocator<T> for HeapAllocator<T> {
 pub const BROTLI_SECTION_GUID: efi::Guid =
   efi::Guid::from_fields(0x3D532050, 0x5CDA, 0x4FD0, 0x87, 0x9E, &[0x0F, 0x7F, 0x63, 0x0D, 0x5A, 0xFB]);
 
+#[derive(Debug, Clone, Copy)]
 struct BrotliSectionExtractor {}
 
 impl SectionExtractor for BrotliSectionExtractor {
-  fn extract(&self, section: Section, extractors: &[Box<dyn SectionExtractor>]) -> Vec<Section> {
+  fn extract(&self, section: Section) -> Vec<Section> {
     if let SectionMetaData::GuidDefined(meta_data) = section.metadata() {
       if meta_data.section_definition_guid == BROTLI_SECTION_GUID {
         let data = section.section_data();
@@ -86,7 +87,7 @@ impl SectionExtractor for BrotliSectionExtractor {
               out_buffer_static_ref,
             )
           } {
-            return FfsSectionIteratorWithExtractors::new(Some(first_encapsulated_section), extractors).collect();
+            return FfsSectionIteratorWithExtractors::new(Some(first_encapsulated_section), Box::new(*self)).collect();
           }
         }
       }
@@ -95,11 +96,11 @@ impl SectionExtractor for BrotliSectionExtractor {
   }
 }
 
-fn print_fv(fv: FirmwareVolume, extractors: &[Box<dyn SectionExtractor>]) {
+fn print_fv(fv: FirmwareVolume) {
   println!("Firmware Volume:");
   for ffs_file in fv.ffs_files() {
     println!("  file: {:x?}", ffs_file);
-    for section in ffs_file.ffs_sections_with_section_extractors(extractors) {
+    for section in ffs_file.ffs_sections_with_section_extractors(Box::new(BrotliSectionExtractor {})) {
       println!("    section: {:x?}", section);
     }
   }
@@ -111,6 +112,6 @@ fn main() -> Result<(), Box<dyn Error>> {
   let fv_bytes = fs::read(root.join("FVMAIN_COMPACT.Fv"))?;
   let fv = unsafe { FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap() };
 
-  print_fv(fv, &[Box::new(BrotliSectionExtractor {})]);
+  print_fv(fv);
   Ok(())
 }
