@@ -19,7 +19,7 @@ pub mod section;
 
 use core::{fmt, mem, slice};
 
-use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
+use alloc::{collections::VecDeque, vec::Vec};
 use attributes::raw::LARGE_FILE;
 use r_efi::efi;
 use section::header::{CommonSectionHeaderExtended, CommonSectionHeaderStandard};
@@ -259,7 +259,10 @@ impl File {
   }
 
   /// Returns an iterator over the sections of the file, using the provided section extractor.
-  pub fn ffs_sections_with_extractor(&self, extractor: Box<dyn SectionExtractor>) -> impl Iterator<Item = Section> {
+  pub fn ffs_sections_with_extractor<'a>(
+    &'a self,
+    extractor: &'a dyn SectionExtractor,
+  ) -> impl Iterator<Item = Section> + 'a {
     FfsSectionIterator::new_with_extractor(self.first_ffs_section(), extractor)
   }
 
@@ -571,43 +574,33 @@ impl fmt::Debug for Section {
   }
 }
 
-struct NullExtractor {}
-impl SectionExtractor for NullExtractor {
-  fn extract(&self, _section: Section) -> Vec<Section> {
-    Vec::new()
-  }
-}
-
 /// Iterator over sections within a file.
-pub struct FfsSectionIterator {
+pub struct FfsSectionIterator<'a> {
   next_section: Option<Section>,
-  extractor: Box<dyn SectionExtractor>,
+  extractor: Option<&'a dyn SectionExtractor>,
   pending_encapsulated_sections: VecDeque<Section>,
 }
 
-impl FfsSectionIterator {
+impl<'a> FfsSectionIterator<'a> {
   /// Create a new section iterator with a no-op section extractor.
   /// Can be used for FVs that contain files with only leaf sections; any encapsulation sections will not be unpacked.
-  pub fn new(start_section: Option<Section>) -> FfsSectionIterator {
-    FfsSectionIterator {
-      next_section: start_section,
-      extractor: Box::new(NullExtractor {}),
-      pending_encapsulated_sections: VecDeque::new(),
-    }
+  pub fn new(start_section: Option<Section>) -> FfsSectionIterator<'a> {
+    FfsSectionIterator { next_section: start_section, extractor: None, pending_encapsulated_sections: VecDeque::new() }
   }
 
   /// Create a new section iterator with the specified extractor.
   /// When the iterator encounters an encapsulated section the given extractor will be used to extract the sections it
   /// contains and they will be added to the front of the iterator queue.
-  pub fn new_with_extractor(
-    start_section: Option<Section>,
-    extractor: Box<dyn SectionExtractor>,
-  ) -> FfsSectionIterator {
-    FfsSectionIterator { next_section: start_section, extractor, pending_encapsulated_sections: VecDeque::new() }
+  pub fn new_with_extractor(start_section: Option<Section>, extractor: &dyn SectionExtractor) -> FfsSectionIterator {
+    FfsSectionIterator {
+      next_section: start_section,
+      extractor: Some(extractor),
+      pending_encapsulated_sections: VecDeque::new(),
+    }
   }
 }
 
-impl Iterator for FfsSectionIterator {
+impl<'a> Iterator for FfsSectionIterator<'a> {
   type Item = Section;
   fn next(&mut self) -> Option<Section> {
     let current = {
@@ -622,9 +615,11 @@ impl Iterator for FfsSectionIterator {
 
     if let Some(section) = &current {
       if section.is_encapsulation() {
-        let extracted_sections = self.extractor.extract(*section);
-        for section in extracted_sections.into_iter().rev() {
-          self.pending_encapsulated_sections.push_front(section);
+        if let Some(extractor) = self.extractor {
+          let extracted_sections = extractor.extract(*section);
+          for section in extracted_sections.into_iter().rev() {
+            self.pending_encapsulated_sections.push_front(section);
+          }
         }
       }
     }

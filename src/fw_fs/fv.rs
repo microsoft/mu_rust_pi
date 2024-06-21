@@ -273,13 +273,16 @@ mod unit_tests {
     path::Path,
   };
 
-  use core::{mem, slice};
+  use core::{mem, slice, sync::atomic::AtomicBool};
   use r_efi::efi;
   use serde::Deserialize;
   use uuid::Uuid;
 
   use crate::fw_fs::{
-    ffs::{file::raw::r#type as FfsRawFileType, section::Type as FfsSectionType, Section as FfsSection},
+    ffs::{
+      file::raw::r#type as FfsRawFileType, section::Type as FfsSectionType, Section as FfsSection, SectionExtractor,
+      SectionMetaData,
+    },
     fv::{BlockMapEntry, FirmwareVolume},
   };
 
@@ -319,12 +322,17 @@ mod unit_tests {
     fv_bytes: Vec<u8>,
     fv: FirmwareVolume,
     mut expected_values: TargetValues,
+    extractor: Option<&dyn SectionExtractor>,
   ) -> Result<(), Box<dyn Error>> {
     let mut count = 0;
     for ffs_file in fv.ffs_files() {
       count += 1;
       let file_name = Uuid::from_bytes_le(*ffs_file.file_name().as_bytes()).to_string().to_uppercase();
-      let sections = ffs_file.ffs_sections().collect::<Vec<_>>();
+      let sections = if let Some(extractor) = extractor {
+        ffs_file.ffs_sections_with_extractor(extractor).collect::<Vec<_>>()
+      } else {
+        ffs_file.ffs_sections().collect::<Vec<_>>()
+      };
       if let Some(mut target) = expected_values.files_to_test.remove(&file_name) {
         assert_eq!(
           target.base_address,
@@ -404,7 +412,7 @@ mod unit_tests {
     let expected_values =
       serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("DXEFV_expected_values.yml"))?)?;
 
-    test_firmware_volume_worker(fv_bytes, fv, expected_values)
+    test_firmware_volume_worker(fv_bytes, fv, expected_values, None)
   }
 
   #[test]
@@ -417,7 +425,43 @@ mod unit_tests {
     let expected_values =
       serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("GIGANTOR_expected_values.yml"))?)?;
 
-    test_firmware_volume_worker(fv_bytes, fv, expected_values)
+    test_firmware_volume_worker(fv_bytes, fv, expected_values, None)
+  }
+
+  #[test]
+  fn test_section_extraction() -> Result<(), Box<dyn Error>> {
+    let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
+
+    let fv_bytes = fs::read(root.join("FVMAIN_COMPACT.Fv"))?;
+    let fv = unsafe { FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap() };
+
+    let expected_values =
+      serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("FVMAIN_COMPACT_expected_values.yml"))?)?;
+
+    struct TestExtractor {
+      invoked: AtomicBool,
+    }
+
+    impl SectionExtractor for TestExtractor {
+      fn extract(&self, section: FfsSection) -> Vec<FfsSection> {
+        let SectionMetaData::GuidDefined(metadata) = section.metadata() else {
+          panic!("Unexpected section metadata");
+        };
+        const BROTLI_SECTION_GUID: efi::Guid =
+          efi::Guid::from_fields(0x3D532050, 0x5CDA, 0x4FD0, 0x87, 0x9E, &[0x0F, 0x7F, 0x63, 0x0D, 0x5A, 0xFB]);
+        assert_eq!(metadata.section_definition_guid, BROTLI_SECTION_GUID);
+        self.invoked.store(true, core::sync::atomic::Ordering::SeqCst);
+        Vec::new()
+      }
+    }
+
+    let test_extractor = TestExtractor { invoked: AtomicBool::new(false) };
+
+    test_firmware_volume_worker(fv_bytes, fv, expected_values, Some(&test_extractor))?;
+
+    assert!(test_extractor.invoked.load(core::sync::atomic::Ordering::SeqCst));
+
+    Ok(())
   }
 
   #[test]

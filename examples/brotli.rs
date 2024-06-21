@@ -87,7 +87,11 @@ impl SectionExtractor for BrotliSectionExtractor {
               out_buffer_static_ref,
             )
           } {
-            return FfsSectionIterator::new_with_extractor(Some(first_encapsulated_section), Box::new(*self)).collect();
+            return FfsSectionIterator::new_with_extractor(
+              Some(first_encapsulated_section),
+              &BrotliSectionExtractor {},
+            )
+            .collect();
           }
         }
       }
@@ -100,7 +104,7 @@ fn print_fv(fv: FirmwareVolume) {
   println!("Firmware Volume:");
   for ffs_file in fv.ffs_files() {
     println!("  file: {:x?}", ffs_file);
-    for section in ffs_file.ffs_sections_with_extractor(Box::new(BrotliSectionExtractor {})) {
+    for section in ffs_file.ffs_sections_with_extractor(&BrotliSectionExtractor {}) {
       println!("    section: {:x?}", section);
     }
   }
