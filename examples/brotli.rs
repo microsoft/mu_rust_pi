@@ -2,7 +2,7 @@ extern crate mu_pi;
 use alloc_no_stdlib::{self, define_index_ops_mut, SliceWrapper, SliceWrapperMut};
 use brotli_decompressor::{BrotliDecompressStream, BrotliResult, BrotliState, HuffmanCode};
 use mu_pi::fw_fs::{
-  ffs::{FfsSectionIteratorWithExtractors, Section, SectionExtractor, SectionMetaData},
+  ffs::{FfsSectionIterator, Section, SectionExtractor, SectionMetaData},
   FirmwareVolume,
 };
 use r_efi::efi;
@@ -87,7 +87,7 @@ impl SectionExtractor for BrotliSectionExtractor {
               out_buffer_static_ref,
             )
           } {
-            return FfsSectionIteratorWithExtractors::new(Some(first_encapsulated_section), Box::new(*self)).collect();
+            return FfsSectionIterator::new_with_extractor(Some(first_encapsulated_section), Box::new(*self)).collect();
           }
         }
       }
@@ -100,7 +100,7 @@ fn print_fv(fv: FirmwareVolume) {
   println!("Firmware Volume:");
   for ffs_file in fv.ffs_files() {
     println!("  file: {:x?}", ffs_file);
-    for section in ffs_file.ffs_sections_with_section_extractors(Box::new(BrotliSectionExtractor {})) {
+    for section in ffs_file.ffs_sections_with_extractor(Box::new(BrotliSectionExtractor {})) {
       println!("    section: {:x?}", section);
     }
   }

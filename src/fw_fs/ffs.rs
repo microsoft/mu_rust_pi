@@ -264,11 +264,8 @@ impl File {
   }
 
   /// returns an iterator over the sections of the file, using the section extractors from the provided vector.
-  pub fn ffs_sections_with_section_extractors(
-    &self,
-    extractor: Box<dyn SectionExtractor>,
-  ) -> impl Iterator<Item = Section> {
-    FfsSectionIteratorWithExtractors::new(self.first_ffs_section(), extractor)
+  pub fn ffs_sections_with_extractor(&self, extractor: Box<dyn SectionExtractor>) -> impl Iterator<Item = Section> {
+    FfsSectionIterator::new_with_extractor(self.first_ffs_section(), extractor)
   }
 
   /// returns the raw file type
@@ -569,42 +566,36 @@ impl fmt::Debug for Section {
   }
 }
 
+struct NullExtractor {}
+impl SectionExtractor for NullExtractor {
+  fn extract(&self, _section: Section) -> Vec<Section> {
+    Vec::new()
+  }
+}
+
 pub struct FfsSectionIterator {
-  next_section: Option<Section>,
-}
-
-impl FfsSectionIterator {
-  pub fn new(start_section: Option<Section>) -> FfsSectionIterator {
-    FfsSectionIterator { next_section: start_section }
-  }
-}
-
-impl Iterator for FfsSectionIterator {
-  type Item = Section;
-  fn next(&mut self) -> Option<Section> {
-    let current = self.next_section?;
-    self.next_section = current.next_section();
-    Some(current)
-  }
-}
-
-pub struct FfsSectionIteratorWithExtractors {
   next_section: Option<Section>,
   extractor: Box<dyn SectionExtractor>,
   pending_encapsulated_sections: VecDeque<Section>,
 }
 
-impl FfsSectionIteratorWithExtractors {
-  pub fn new(start_section: Option<Section>, extractor: Box<dyn SectionExtractor>) -> FfsSectionIteratorWithExtractors {
-    FfsSectionIteratorWithExtractors {
+impl FfsSectionIterator {
+  pub fn new(start_section: Option<Section>) -> FfsSectionIterator {
+    FfsSectionIterator {
       next_section: start_section,
-      extractor,
+      extractor: Box::new(NullExtractor {}),
       pending_encapsulated_sections: VecDeque::new(),
     }
   }
+  pub fn new_with_extractor(
+    start_section: Option<Section>,
+    extractor: Box<dyn SectionExtractor>,
+  ) -> FfsSectionIterator {
+    FfsSectionIterator { next_section: start_section, extractor, pending_encapsulated_sections: VecDeque::new() }
+  }
 }
 
-impl Iterator for FfsSectionIteratorWithExtractors {
+impl Iterator for FfsSectionIterator {
   type Item = Section;
   fn next(&mut self) -> Option<Section> {
     let current = {
