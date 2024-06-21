@@ -99,7 +99,7 @@ impl From<&'static file::Header> for FfsFileHeader {
   }
 }
 
-/// Firmware File System (FFS) File
+/// Firmware File System (FFS) File.
 #[derive(Copy, Clone)]
 pub struct File {
   containing_fv: FirmwareVolume,
@@ -131,17 +131,17 @@ impl File {
     Ok(File { containing_fv, ffs_file })
   }
 
-  /// returns the file size (including header)
+  /// Returns the file size (including header).
   pub fn file_size(&self) -> u64 {
     self.ffs_file.size()
   }
 
-  /// returns file data size (not including header)
+  /// Returns file data size (not including header).
   pub fn file_data_size(&self) -> u64 {
     self.ffs_file.size() - self.ffs_file.data_offset() as u64
   }
 
-  /// returns the file type
+  /// Returns the file type.
   pub fn file_type(&self) -> Option<FfsFileType> {
     match self.ffs_file.header().file_type {
       FfsFileRawType::RAW => Some(FfsFileType::Raw),
@@ -167,7 +167,7 @@ impl File {
     }
   }
 
-  /// returns the FV File Attributes (see PI spec 1.8A 3.4.1.4)
+  /// Returns the FV File Attributes (see PI spec 1.8A 3.4.1.4).
   pub fn fv_file_attributes(&self) -> EfiFvFileAttributes {
     let attributes = self.ffs_file.header().attributes;
     let data_alignment = (attributes & EfiFfsFileAttributeRaw::DATA_ALIGNMENT) >> 3;
@@ -193,28 +193,28 @@ impl File {
     file_attributes as EfiFvFileAttributes
   }
 
-  /// returns the GUID filename for this file
+  /// Returns the GUID filename for this file.
   pub fn file_name(&self) -> efi::Guid {
     self.ffs_file.header().name
   }
 
-  /// returns the base address in memory of this file
+  /// Returns the base address in memory of this file.
   pub fn base_address(&self) -> efi::PhysicalAddress {
     self.ffs_file.base_address()
   }
 
-  /// returns the memory address of the end of the file (not inclusive)
+  /// Returns the memory address of the end of the file (not inclusive).
   pub fn top_address(&self) -> efi::PhysicalAddress {
     self.base_address() + self.file_size()
   }
 
-  /// returns the file data
+  /// Returns the file data.
   pub fn file_data(&self) -> &[u8] {
     let data_ptr = self.ffs_file.data_address() as *mut u8;
     unsafe { slice::from_raw_parts(data_ptr, self.file_data_size() as usize) }
   }
 
-  /// returns the next file in the FV, if any.
+  /// Returns the next file in the Firmware Volume, if any.
   pub fn next_ffs_file(&self) -> Option<File> {
     let mut next_file_address = self.base_address();
     next_file_address += self.file_size();
@@ -237,19 +237,14 @@ impl File {
         return None;
       }
 
-      let file = unsafe { File::new(self.containing_fv, next_file_address).ok()? };
-      // To be super paranoid, we could check a lot of things here to make sure we have a
-      // legit file and didn't run into empty space at the end of the FV. For now, assume
-      // if the "file_type" is something legit, that the file is good.
-
-      if file.file_type().is_some() {
-        return Some(file);
-      }
+      // validation of the file is performed in the File::new constructor.
+      unsafe { File::new(self.containing_fv, next_file_address).ok() }
+    } else {
+      None
     }
-    None
   }
 
-  /// returns the first section of the file (if any)
+  /// Returns the first section of the file, if any.
   pub fn first_ffs_section(&self) -> Option<Section> {
     if self.file_size() <= self.ffs_file.data_offset() as u64 {
       return None;
@@ -258,26 +253,27 @@ impl File {
     Some(first_section)
   }
 
-  /// returns an iterator over the sections of the file.
+  /// Returns an iterator over the sections of the file.
   pub fn ffs_sections(&self) -> impl Iterator<Item = Section> {
     FfsSectionIterator::new(self.first_ffs_section())
   }
 
-  /// returns an iterator over the sections of the file, using the section extractors from the provided vector.
+  /// Returns an iterator over the sections of the file, using the provided section extractor.
   pub fn ffs_sections_with_extractor(&self, extractor: Box<dyn SectionExtractor>) -> impl Iterator<Item = Section> {
     FfsSectionIterator::new_with_extractor(self.first_ffs_section(), extractor)
   }
 
-  /// returns the raw file type
+  /// Returns the raw file type.
   pub fn file_type_raw(&self) -> u8 {
     self.ffs_file.header().file_type
   }
 
-  /// returns the raw file attributes
+  /// Returns the raw file attributes.
   pub fn file_attributes_raw(&self) -> u8 {
     self.ffs_file.header().attributes
   }
 
+  /// Returns the base address of the containing FV.
   pub fn containing_fv_base(&self) -> efi::PhysicalAddress {
     self.containing_fv.base_address()
   }
@@ -315,7 +311,9 @@ impl Iterator for FileIterator {
   }
 }
 
+/// A section extractor that can be passed to [`FfsSectionIterator`] to unpack encapsulated sections.
 pub trait SectionExtractor {
+  /// Extract the given encapsulated section and return the contained sections as a vector.
   fn extract(&self, section: Section) -> Vec<Section>;
 }
 
@@ -384,7 +382,7 @@ pub enum SectionMetaData {
   FreeformSubtypeGuid(&'static FfsSectionHeader::FreeformSubtypeGuid),
 }
 
-/// Firmware File System (FFS) Section
+/// Firmware File System (FFS) Section.
 #[derive(Clone, Copy)]
 pub struct Section {
   containing_ffs: File,
@@ -474,7 +472,10 @@ impl Section {
     Ok(section)
   }
 
-  /// returns the base address in memory of this section
+  /// Returns the base address in memory of this section.
+  ///
+  /// Note: if this is a section contained within an encapsulation section, then the base address of this section is not
+  /// guaranteed to be within the bounds of the containing [`File`]'s data buffer.
   pub fn base_address(&self) -> efi::PhysicalAddress {
     self.header.base_address()
   }
@@ -488,7 +489,7 @@ impl Section {
     }
   }
 
-  /// returns the section type
+  /// Returns the section type.
   pub fn section_type(&self) -> Option<FfsSection::Type> {
     match self.header.section_type() {
       FfsSectionRawType::encapsulated::COMPRESSION => Some(FfsSection::Type::Compression),
@@ -510,31 +511,35 @@ impl Section {
     }
   }
 
-  /// returns the total section size (including the header and metadata, if any)
+  /// Returns the total section size (including the header and metadata, if any).
   pub fn section_size(&self) -> usize {
     self.header.section_size()
   }
 
-  /// returns the section data
+  /// Returns the section data.
   pub fn section_data(&self) -> &[u8] {
     self.data
   }
 
-  /// returns the section metadata
+  /// Returns the section metadata.
   pub fn metadata(&self) -> SectionMetaData {
     self.meta_data
   }
 
-  pub fn is_encapsulated(&self) -> bool {
+  /// Indicates whether this section is an encapsulation section.
+  ///
+  /// See PI spec 1.8A Section 2.1.5 for definition of encapsulation section vs. leaf section.
+  pub fn is_encapsulation(&self) -> bool {
     self.section_type() == Some(FfsSection::Type::Compression)
       || self.section_type() == Some(FfsSection::Type::GuidDefined)
   }
 
-  pub fn containing_ffs(&self) -> File {
+  /// Returns the containing FFS file for the given section.
+  pub fn containing_file(&self) -> File {
     self.containing_ffs
   }
 
-  /// returns the next section of the containing file
+  /// Returns the next section of the containing file.
   pub fn next_section(&self) -> Option<Section> {
     let mut next_section_address = self.base_address();
     next_section_address += self.section_size() as efi::PhysicalAddress;
@@ -546,7 +551,7 @@ impl Section {
     // check to see if we ran off the end of the file or containing extraction buffer yet.
     let top_address = match self.containing_extraction_buffer {
       Some(buffer) => buffer.as_ptr() as efi::PhysicalAddress + buffer.len() as efi::PhysicalAddress,
-      None => self.containing_ffs().top_address(),
+      None => self.containing_file().top_address(),
     };
 
     if next_section_address
@@ -573,6 +578,7 @@ impl SectionExtractor for NullExtractor {
   }
 }
 
+/// Iterator over sections within a file.
 pub struct FfsSectionIterator {
   next_section: Option<Section>,
   extractor: Box<dyn SectionExtractor>,
@@ -580,6 +586,8 @@ pub struct FfsSectionIterator {
 }
 
 impl FfsSectionIterator {
+  /// Create a new section iterator with a no-op section extractor.
+  /// Can be used for FVs that contain files with only leaf sections; any encapsulation sections will not be unpacked.
   pub fn new(start_section: Option<Section>) -> FfsSectionIterator {
     FfsSectionIterator {
       next_section: start_section,
@@ -587,6 +595,10 @@ impl FfsSectionIterator {
       pending_encapsulated_sections: VecDeque::new(),
     }
   }
+
+  /// Create a new section iterator with the specified extractor.
+  /// When the iterator encounters an encapsulated section the given extractor will be used to extract the sections it
+  /// contains and they will be added to the front of the iterator queue.
   pub fn new_with_extractor(
     start_section: Option<Section>,
     extractor: Box<dyn SectionExtractor>,
@@ -609,7 +621,7 @@ impl Iterator for FfsSectionIterator {
     };
 
     if let Some(section) = &current {
-      if section.is_encapsulated() {
+      if section.is_encapsulation() {
         let extracted_sections = self.extractor.extract(*section);
         for section in extracted_sections.into_iter().rev() {
           self.pending_encapsulated_sections.push_front(section);

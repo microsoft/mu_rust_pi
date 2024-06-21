@@ -82,7 +82,7 @@ impl SectionExtractor for BrotliSectionExtractor {
           let out_buffer_static_ref = unsafe { out_buffer_ptr.as_ref().unwrap() };
           if let Ok(first_encapsulated_section) = unsafe {
             Section::new_in_extraction_buffer(
-              section.containing_ffs(),
+              section.containing_file(),
               out_buffer_ptr as *const u8 as efi::PhysicalAddress,
               out_buffer_static_ref,
             )

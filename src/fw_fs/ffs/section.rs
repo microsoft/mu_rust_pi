@@ -63,7 +63,7 @@ pub enum Type {
 pub mod header {
   use r_efi::base::Guid;
 
-  /// EFI_COMMON_SECTION_HEADER
+  /// EFI_COMMON_SECTION_HEADER per PI spec 1.8A 3.2.4.1
   #[repr(C)]
   #[derive(Debug)]
   pub struct CommonSectionHeaderStandard {
@@ -71,7 +71,7 @@ pub mod header {
     pub section_type: u8,
   }
 
-  /// EFI_COMMON_SECTION_HEADER2
+  /// EFI_COMMON_SECTION_HEADER2 per PI spec 1.8A 3.2.4.1
   #[repr(C)]
   #[derive(Debug)]
   pub struct CommonSectionHeaderExtended {
@@ -80,7 +80,7 @@ pub mod header {
     pub extended_size: u32,
   }
 
-  /// EFI_COMPRESSION_SECTION
+  /// EFI_COMPRESSION_SECTION per PI spec 1.8A 3.2.5.2
   #[repr(C)]
   #[derive(Debug)]
   pub struct Compression {
@@ -88,7 +88,7 @@ pub mod header {
     pub compression_type: u8,
   }
 
-  /// EFI_GUID_DEFINED_SECTION
+  /// EFI_GUID_DEFINED_SECTION per PI spec 1.8A 3.2.5.7
   #[repr(C)]
   #[derive(Debug)]
   pub struct GuidDefined {
@@ -98,14 +98,14 @@ pub mod header {
     // Guid-specific header fields.
   }
 
-  /// EFI_VERSION_SECTION
+  /// EFI_VERSION_SECTION per PI spec 1.8A 3.2.5.15
   #[repr(C)]
   #[derive(Debug)]
   pub struct Version {
     pub build_number: u16,
   }
 
-  /// EFI_FREEFORM_SUBTYPE_GUID_SECTION
+  /// EFI_FREEFORM_SUBTYPE_GUID_SECTION per PI spec 1.8A 3.2.5.6
   #[repr(C)]
   #[derive(Debug)]
   pub struct FreeformSubtypeGuid {
