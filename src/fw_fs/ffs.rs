@@ -17,7 +17,7 @@ pub mod file;
 pub mod guid;
 pub mod section;
 
-use core::{fmt, mem, slice};
+use core::{fmt, mem};
 
 use alloc::{collections::VecDeque, vec::Vec};
 use attributes::raw::LARGE_FILE;
@@ -36,20 +36,20 @@ use crate::{
     },
     fv::{
       file::{raw::attribute as FvRawAttribute, EfiFvFileAttributes},
-      FirmwareVolume, Header as FvHeader,
+      FirmwareVolume,
     },
     fvb::attributes::raw::fvb2 as Fvb2RawAttributes,
   },
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum FfsFileHeader {
-  Standard(&'static file::Header),
-  Extended(&'static file::Header2),
+enum FfsFileHeader<'a> {
+  Standard(&'a file::Header),
+  Extended(&'a file::Header2),
 }
 
-impl FfsFileHeader {
-  fn header(&self) -> &'static file::Header {
+impl<'a> FfsFileHeader<'a> {
+  fn header(&self) -> &'a file::Header {
     match self {
       Self::Standard(header) => header,
       Self::Extended(header) => &header.header,
@@ -59,11 +59,10 @@ impl FfsFileHeader {
   fn size(&self) -> u64 {
     match self {
       Self::Standard(header) => {
-        let mut size: u64 = 0;
-        size += header.size[0] as u64;
-        size += (header.size[1] as u64) << 8;
-        size += (header.size[2] as u64) << 16;
-        size
+        //add a byte to 24-bit size to get 32-bit size.
+        let mut size_vec = header.size.to_vec();
+        size_vec.push(0);
+        u32::from_le_bytes(size_vec.try_into().unwrap()) as u64
       }
       Self::Extended(header) => header.extended_size,
     }
@@ -75,38 +74,42 @@ impl FfsFileHeader {
       Self::Extended(_) => mem::size_of::<file::Header2>(),
     }
   }
-
-  fn base_address(&self) -> efi::PhysicalAddress {
-    match self {
-      Self::Standard(header) => *header as *const file::Header as efi::PhysicalAddress,
-      Self::Extended(header2) => *header2 as *const file::Header2 as efi::PhysicalAddress,
-    }
-  }
-
-  fn data_address(&self) -> efi::PhysicalAddress {
-    self.base_address() + self.data_offset() as u64
-  }
 }
 
-impl From<&'static file::Header> for FfsFileHeader {
-  fn from(file: &'static file::Header) -> Self {
-    if (file.attributes & LARGE_FILE) != 0 {
-      let extended = unsafe { (file as *const file::Header as *const file::Header2).as_ref().unwrap() };
-      Self::Extended(extended)
-    } else {
-      Self::Standard(file)
+impl<'a> TryFrom<&'a [u8]> for FfsFileHeader<'a> {
+  type Error = efi::Status;
+  fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+    // check that value has enough space for a standard header
+    if mem::size_of::<file::Header>() > value.len() {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    // safety: confirmed there is enough space in value to hold the header.
+    let file = value.as_ptr() as *const file::Header;
+    unsafe {
+      if (*file).attributes & LARGE_FILE != 0 {
+        //extended header. check that there is enough space in the buffer for the extra fields.
+        if mem::size_of::<file::Header2>() > value.len() {
+          Err(efi::Status::INVALID_PARAMETER)?;
+        }
+        Ok(Self::Extended(&*(file as *const file::Header2)))
+      } else {
+        Ok(Self::Standard(&*file))
+      }
     }
   }
 }
 
 /// Firmware File System (FFS) File.
 #[derive(Copy, Clone)]
-pub struct File {
-  containing_fv: FirmwareVolume,
-  ffs_file: FfsFileHeader,
+pub struct File<'a> {
+  containing_fv: &'a FirmwareVolume<'a>,
+  file_offset: usize,
+  file_header: FfsFileHeader<'a>,
+  file_data: &'a [u8],
 }
 
-impl File {
+impl<'a> File<'a> {
   /// Instantiate a new File structure given the containing volume and base address.
   ///
   /// ## Safety
@@ -115,35 +118,37 @@ impl File {
   /// ensure that the memory containing the file data outlives this File instance.
   ///
   /// Various sanity checks will be performed by this routine to ensure File consistency.
-  pub unsafe fn new(
-    containing_fv: FirmwareVolume,
-    file_base_address: efi::PhysicalAddress,
-  ) -> Result<File, efi::Status> {
-    if file_base_address < containing_fv.base_address() || containing_fv.top_address() <= file_base_address {
+  pub fn new(containing_fv: &'a FirmwareVolume, file_offset: usize) -> Result<File<'a>, efi::Status> {
+    let fv_data = containing_fv.fv_data_buffer();
+
+    //check that fv_data has enough space for a standard file header.
+    if file_offset + mem::size_of::<file::Header>() > fv_data.len() {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
-    let ffs_file = file_base_address as *const file::Header;
-    let ffs_file = ffs_file.as_ref().ok_or(efi::Status::INVALID_PARAMETER)?;
+    let file_header = fv_data[file_offset..].try_into()?;
 
-    let ffs_file = ffs_file.into();
-
-    Ok(File { containing_fv, ffs_file })
+    Ok(File {
+      containing_fv,
+      file_offset,
+      file_header,
+      file_data: &fv_data[file_offset..file_offset + file_header.size() as usize],
+    })
   }
 
   /// Returns the file size (including header).
   pub fn file_size(&self) -> u64 {
-    self.ffs_file.size()
+    self.file_header.size()
   }
 
   /// Returns file data size (not including header).
   pub fn file_data_size(&self) -> u64 {
-    self.ffs_file.size() - self.ffs_file.data_offset() as u64
+    self.file_header.size() - self.file_header.data_offset() as u64
   }
 
   /// Returns the file type.
   pub fn file_type(&self) -> Option<FfsFileType> {
-    match self.ffs_file.header().file_type {
+    match self.file_header.header().file_type {
       FfsFileRawType::RAW => Some(FfsFileType::Raw),
       FfsFileRawType::FREEFORM => Some(FfsFileType::FreeForm),
       FfsFileRawType::SECURITY_CORE => Some(FfsFileType::SecurityCore),
@@ -169,7 +174,7 @@ impl File {
 
   /// Returns the FV File Attributes (see PI spec 1.8A 3.4.1.4).
   pub fn fv_file_attributes(&self) -> EfiFvFileAttributes {
-    let attributes = self.ffs_file.header().attributes;
+    let attributes = self.file_header.header().attributes;
     let data_alignment = (attributes & EfiFfsFileAttributeRaw::DATA_ALIGNMENT) >> 3;
     // decode alignment per Table 3.3 in PI spec 1.8 Part III.
     let mut file_attributes: u32 = match (
@@ -195,62 +200,46 @@ impl File {
 
   /// Returns the GUID filename for this file.
   pub fn file_name(&self) -> efi::Guid {
-    self.ffs_file.header().name
+    self.file_header.header().name
   }
 
-  /// Returns the base address in memory of this file.
-  pub fn base_address(&self) -> efi::PhysicalAddress {
-    self.ffs_file.base_address()
-  }
-
-  /// Returns the memory address of the end of the file (not inclusive).
-  pub fn top_address(&self) -> efi::PhysicalAddress {
-    self.base_address() + self.file_size()
-  }
-
-  /// Returns the file data.
-  pub fn file_data(&self) -> &[u8] {
-    let data_ptr = self.ffs_file.data_address() as *mut u8;
-    unsafe { slice::from_raw_parts(data_ptr, self.file_data_size() as usize) }
+  /// Returns the file contents (not including the header).
+  pub fn file_data(&self) -> &'a [u8] {
+    &self.file_data[self.file_header.data_offset()..]
   }
 
   /// Returns the next file in the Firmware Volume, if any.
-  pub fn next_ffs_file(&self) -> Option<File> {
-    let mut next_file_address = self.base_address();
-    next_file_address += self.file_size();
-
+  pub fn next_ffs_file(&self) -> Option<File<'a>> {
     // per the PI spec, "Given a file F, the next file FvHeader is located at the next 8-byte aligned firmware volume
     // offset following the last byte the file F"
     // but, in fact, that just means "8-byte aligned" per the EDK2 implementation.
-    next_file_address = align_up(next_file_address, 0x8);
+    let next_file_offset = align_up(self.file_offset as u64 + self.file_size(), 0x8) as usize;
 
-    // check to see if we ran off the end of the FV yet.
-    let erase_byte: [u8; 1] =
-      if self.containing_fv.attributes() & Fvb2RawAttributes::ERASE_POLARITY != 0 { [0xFF] } else { [0] };
-    let remaining_space = self.containing_fv.top_address() - mem::size_of::<FvHeader>() as efi::PhysicalAddress;
-    if next_file_address <= remaining_space {
-      let test_size = mem::size_of::<FvHeader>().min(remaining_space.try_into().unwrap());
-      let remaining_space_slice = unsafe { slice::from_raw_parts(next_file_address as *const u8, test_size) };
-
-      if remaining_space_slice.windows(mem::size_of_val(&erase_byte)).all(|window| window == erase_byte) {
-        // No files are left, only erased bytes
-        return None;
-      }
-
-      // validation of the file is performed in the File::new constructor.
-      unsafe { File::new(self.containing_fv, next_file_address).ok() }
-    } else {
-      None
+    //check to see if the offset is off the end of the FV
+    if next_file_offset + mem::size_of::<file::Header>() > self.containing_fv.fv_data_buffer().len() {
+      return None;
     }
+
+    //check if the rest of the FV is full of erase bytes
+    let erase_byte: u8 =
+      if self.containing_fv.attributes() & Fvb2RawAttributes::ERASE_POLARITY != 0 { 0xff } else { 0 };
+    if self.containing_fv.fv_data_buffer()[next_file_offset..].iter().all(|&x| x == erase_byte) {
+      return None;
+    }
+
+    // Sanity checking of file header is done in constructor.
+    File::new(self.containing_fv, next_file_offset).ok()
   }
 
   /// Returns the first section of the file, if any.
-  pub fn first_ffs_section(&self) -> Option<Section> {
-    if self.file_size() <= self.ffs_file.data_offset() as u64 {
+  pub fn first_ffs_section(&'a self) -> Option<Section<'a>> {
+    // handle the scenario where there isn't enough room for even a single section.
+    if self.file_size() <= (self.file_header.data_offset() + mem::size_of::<CommonSectionHeaderStandard>()) as u64 {
       return None;
     }
-    let first_section = unsafe { Section::new(*self, self.ffs_file.data_address()).ok()? };
-    Some(first_section)
+
+    //Sanity checking of the section header is done in constructor.
+    Section::new(self, self.file_header.data_offset(), self.file_data).ok()
   }
 
   /// Returns an iterator over the sections of the file.
@@ -259,7 +248,7 @@ impl File {
   }
 
   /// Returns an iterator over the sections of the file, using the provided section extractor.
-  pub fn ffs_sections_with_extractor<'a>(
+  pub fn ffs_sections_with_extractor(
     &'a self,
     extractor: &'a dyn SectionExtractor,
   ) -> impl Iterator<Item = Section> + 'a {
@@ -268,26 +257,26 @@ impl File {
 
   /// Returns the raw file type.
   pub fn file_type_raw(&self) -> u8 {
-    self.ffs_file.header().file_type
+    self.file_header.header().file_type
   }
 
   /// Returns the raw file attributes.
   pub fn file_attributes_raw(&self) -> u8 {
-    self.ffs_file.header().attributes
+    self.file_header.header().attributes
   }
 
   /// Returns the base address of the containing FV.
-  pub fn containing_fv_base(&self) -> efi::PhysicalAddress {
-    self.containing_fv.base_address()
+  pub fn containing_fv_data(&self) -> &'a [u8] {
+    self.containing_fv.fv_data_buffer()
   }
 }
 
-impl fmt::Debug for File {
+impl<'a> fmt::Debug for File<'a> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(
       f,
-      "File @{:#x} type: {:?} name: {:?} size: {:?}",
-      self.base_address(),
+      "File @{:#x?} type: {:?} name: {:?} size: {:?}",
+      self.containing_fv_data().as_ptr(),
       self.file_type(),
       Uuid::from_bytes_le(*self.file_name().as_bytes()),
       self.file_size()
@@ -295,19 +284,19 @@ impl fmt::Debug for File {
   }
 }
 
-pub(crate) struct FileIterator {
-  next_ffs: Option<File>,
+pub(crate) struct FileIterator<'a> {
+  next_ffs: Option<File<'a>>,
 }
 
-impl FileIterator {
-  pub fn new(start_file: Option<File>) -> FileIterator {
+impl<'a> FileIterator<'a> {
+  pub fn new(start_file: Option<File<'a>>) -> FileIterator<'a> {
     FileIterator { next_ffs: start_file }
   }
 }
 
-impl Iterator for FileIterator {
-  type Item = File;
-  fn next(&mut self) -> Option<File> {
+impl<'a> Iterator for FileIterator<'a> {
+  type Item = File<'a>;
+  fn next(&mut self) -> Option<File<'a>> {
     let current = self.next_ffs?;
     self.next_ffs = current.next_ffs_file();
     Some(current)
@@ -321,26 +310,12 @@ pub trait SectionExtractor {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum CommonSectionHeader {
-  Standard(&'static FfsSectionHeader::CommonSectionHeaderStandard),
-  Extended(&'static FfsSectionHeader::CommonSectionHeaderExtended),
+enum CommonSectionHeader<'a> {
+  Standard(&'a FfsSectionHeader::CommonSectionHeaderStandard),
+  Extended(&'a FfsSectionHeader::CommonSectionHeaderExtended),
 }
 
-impl CommonSectionHeader {
-  unsafe fn new(base_address: efi::PhysicalAddress) -> Result<CommonSectionHeader, ()> {
-    let common_hdr_ptr = (base_address as *const FfsSectionHeader::CommonSectionHeaderStandard).as_ref().ok_or(())?;
-
-    let size = &common_hdr_ptr.size;
-
-    if size.iter().all(|x| *x == 0xff) {
-      let extended_hdr_ptr =
-        (base_address as *const FfsSectionHeader::CommonSectionHeaderExtended).as_ref().ok_or(())?;
-      Ok(CommonSectionHeader::Extended(extended_hdr_ptr))
-    } else {
-      Ok(CommonSectionHeader::Standard(common_hdr_ptr))
-    }
-  }
-
+impl<'a> CommonSectionHeader<'a> {
   fn section_type(&self) -> u8 {
     match self {
       CommonSectionHeader::Standard(header) => header.section_type,
@@ -360,13 +335,6 @@ impl CommonSectionHeader {
     }
   }
 
-  fn base_address(&self) -> efi::PhysicalAddress {
-    match *self {
-      CommonSectionHeader::Standard(header) => header as *const _ as efi::PhysicalAddress,
-      CommonSectionHeader::Extended(header) => header as *const _ as efi::PhysicalAddress,
-    }
-  }
-
   fn header_size(&self) -> usize {
     match self {
       CommonSectionHeader::Standard(_) => mem::size_of::<CommonSectionHeaderStandard>(),
@@ -375,126 +343,140 @@ impl CommonSectionHeader {
   }
 }
 
+impl<'a> TryFrom<&'a [u8]> for CommonSectionHeader<'a> {
+  type Error = efi::Status;
+  fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+    if mem::size_of::<CommonSectionHeaderStandard>() > value.len() {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    //safety: check above guarantees that buffer can hold at least standard header size.
+    let header = unsafe { &*(value.as_ptr() as *const CommonSectionHeaderStandard) };
+
+    if header.size.iter().all(|&x| x == 0xff) {
+      //check if extended header can fit in the buffer.
+      if mem::size_of::<CommonSectionHeaderExtended>() > value.len() {
+        Err(efi::Status::INVALID_PARAMETER)?;
+      }
+      Ok(CommonSectionHeader::Extended(unsafe { &*(value.as_ptr() as *const CommonSectionHeaderExtended) }))
+    } else {
+      Ok(CommonSectionHeader::Standard(header))
+    }
+  }
+}
+
 /// Section metadata
 #[derive(Debug, Clone, Copy)]
-pub enum SectionMetaData {
+pub enum SectionMetaData<'a> {
   None,
-  Compression(&'static FfsSectionHeader::Compression),
-  GuidDefined(&'static FfsSectionHeader::GuidDefined),
-  Version(&'static FfsSectionHeader::Version),
-  FreeformSubtypeGuid(&'static FfsSectionHeader::FreeformSubtypeGuid),
+  Compression(&'a FfsSectionHeader::Compression),
+  GuidDefined(&'a FfsSectionHeader::GuidDefined),
+  Version(&'a FfsSectionHeader::Version),
+  FreeformSubtypeGuid(&'a FfsSectionHeader::FreeformSubtypeGuid),
 }
 
 /// Firmware File System (FFS) Section.
 #[derive(Clone, Copy)]
-pub struct Section {
-  containing_ffs: File,
-  containing_extraction_buffer: Option<&'static [u8]>,
-  header: CommonSectionHeader,
-  meta_data: SectionMetaData,
-  data: &'static [u8],
+pub struct Section<'a> {
+  containing_ffs: &'a File<'a>,
+  section_offset: usize,
+  section_header: CommonSectionHeader<'a>,
+  meta_data: SectionMetaData<'a>,
+  containing_buffer: &'a [u8],
+  section_data: &'a [u8],
 }
 
-impl Section {
-  /// Instantiate a new Section structure given the containing file and base address.
-  ///
-  /// ## Safety
-  /// Caller must ensure that base_address points to the start of a valid FFS section header and that it is safe to
-  /// access memory from the start of that header to the full length fo the section specified by that header. Caller
-  /// must also ensure that the memory containing the section data outlives this Section instance.
-  ///
-  /// Various sanity checks will be performed by this routine to ensure Section consistency.
-  pub unsafe fn new(containing_ffs: File, base_address: efi::PhysicalAddress) -> Result<Section, efi::Status> {
-    let header = CommonSectionHeader::new(base_address).map_err(|_| efi::Status::INVALID_PARAMETER)?;
+impl<'a> Section<'a> {
+  pub fn new(
+    containing_ffs: &'a File<'a>,
+    section_offset: usize,
+    containing_buffer: &'a [u8],
+  ) -> Result<Section<'a>, efi::Status> {
+    //check that section_buffer has enough space for a standard section header.
+    if section_offset + mem::size_of::<CommonSectionHeaderStandard>() > containing_buffer.len() {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
 
-    let (meta_data, data, len) = match header.section_type() {
+    let section_header: CommonSectionHeader = containing_buffer[section_offset..].try_into()?;
+
+    //offset of meta data (if present) or actual data
+    let content_offset = section_offset + section_header.header_size();
+    let section_end = section_offset + section_header.section_size();
+
+    let (meta_data, section_data) = match section_header.section_type() {
       FfsSectionRawType::encapsulated::COMPRESSION => {
-        let compression = (header.base_address() + header.header_size() as efi::PhysicalAddress)
-          as *const FfsSectionHeader::Compression;
-        let compression = unsafe { compression.as_ref().ok_or(efi::Status::INVALID_PARAMETER)? };
-        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Compression>();
-        let data = (header.base_address() + total_header as efi::PhysicalAddress) as *const u8;
-        let len = header.section_size() - total_header;
-        (SectionMetaData::Compression(compression), data, len)
+        //check if compression header can fit in the section buffer
+        let compression_header_size = mem::size_of::<FfsSectionHeader::Compression>();
+        if content_offset + compression_header_size > containing_buffer.len() {
+          Err(efi::Status::INVALID_PARAMETER)?
+        }
+
+        //safety: above checks confirm that compression metadata fits in the section buffer, so safe to cast to a ref.
+        let meta_data = unsafe {
+          SectionMetaData::Compression(
+            &*(containing_buffer[content_offset..].as_ptr() as *const FfsSectionHeader::Compression),
+          )
+        };
+
+        let data_offset = content_offset + compression_header_size;
+        (meta_data, &containing_buffer[data_offset..section_end])
       }
       FfsSectionRawType::encapsulated::GUID_DEFINED => {
-        let guid_defined = (header.base_address() + header.header_size() as efi::PhysicalAddress)
-          as *const FfsSectionHeader::GuidDefined;
-        let guid_defined = unsafe { guid_defined.as_ref().ok_or(efi::Status::INVALID_PARAMETER)? };
-        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::GuidDefined>();
-        let data = (header.base_address() + total_header as efi::PhysicalAddress) as *const u8;
-        let len = header.section_size() - total_header;
-        (SectionMetaData::GuidDefined(guid_defined), data, len)
+        //check if guid-defined header can fit in the section buffer
+        let guid_defined_header_size = mem::size_of::<FfsSectionHeader::GuidDefined>();
+        if content_offset + guid_defined_header_size > containing_buffer.len() {
+          Err(efi::Status::INVALID_PARAMETER)?
+        }
+
+        //safety: above checks confirm that guid_defined metadata fits in the section buffer, so safe to cast to a ref.
+        let guid_defined_header =
+          unsafe { &*(containing_buffer[content_offset..].as_ptr() as *const FfsSectionHeader::GuidDefined) };
+
+        let data_offset = guid_defined_header.data_offset as usize;
+        let meta_data = SectionMetaData::GuidDefined(guid_defined_header);
+        (meta_data, &containing_buffer[data_offset..section_end])
       }
       FfsSectionRawType::VERSION => {
-        let version =
-          (header.base_address() + header.header_size() as efi::PhysicalAddress) as *const FfsSectionHeader::Version;
-        let version = unsafe { version.as_ref().ok_or(efi::Status::INVALID_PARAMETER)? };
-        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::Version>();
-        let data = (header.base_address() + total_header as efi::PhysicalAddress) as *const u8;
-        let len = header.section_size() - total_header;
-        (SectionMetaData::Version(version), data, len)
+        //check if version header can fit in the section buffer
+        let version_header_size = mem::size_of::<FfsSectionHeader::Version>();
+        if content_offset + version_header_size > containing_buffer.len() {
+          Err(efi::Status::INVALID_PARAMETER)?
+        }
+
+        //safety: above checks confirm that version metadata fits in the section buffer, so safe to cast to a ref.
+        let meta_data = unsafe {
+          SectionMetaData::Version(&*(containing_buffer[content_offset..].as_ptr() as *const FfsSectionHeader::Version))
+        };
+
+        let data_offset = content_offset + version_header_size;
+        (meta_data, &containing_buffer[data_offset..section_end])
       }
       FfsSectionRawType::FREEFORM_SUBTYPE_GUID => {
-        let freeform_subtype = (header.base_address() + header.header_size() as efi::PhysicalAddress)
-          as *const FfsSectionHeader::FreeformSubtypeGuid;
-        let freeform_subtype = unsafe { freeform_subtype.as_ref().ok_or(efi::Status::INVALID_PARAMETER)? };
-        let total_header = header.header_size() + mem::size_of::<FfsSectionHeader::FreeformSubtypeGuid>();
-        let data = (header.base_address() + total_header as efi::PhysicalAddress) as *const u8;
-        let len = header.section_size() - total_header;
-        (SectionMetaData::FreeformSubtypeGuid(freeform_subtype), data, len)
+        //check if freeform_guid header can fit in the section buffer
+        let free_form_subtype_header = mem::size_of::<FfsSectionHeader::FreeformSubtypeGuid>();
+        if content_offset + free_form_subtype_header > containing_buffer.len() {
+          Err(efi::Status::INVALID_PARAMETER)?
+        }
+
+        //safety: above checks confirm that freeform_guid metadata fits in the section buffer, so safe to cast to a ref.
+        let meta_data = unsafe {
+          SectionMetaData::FreeformSubtypeGuid(
+            &*(containing_buffer[content_offset..].as_ptr() as *const FfsSectionHeader::FreeformSubtypeGuid),
+          )
+        };
+
+        let data_offset = content_offset + free_form_subtype_header;
+        (meta_data, &containing_buffer[data_offset..section_end])
       }
-      _ => {
-        let data = (header.base_address() + header.header_size() as efi::PhysicalAddress) as *const u8;
-        let len = header.section_size() - header.header_size();
-        (SectionMetaData::None, data, len)
-      }
+      _ => (SectionMetaData::None, &containing_buffer[content_offset..section_end]),
     };
 
-    let data = unsafe { slice::from_raw_parts(data, len) };
-
-    Ok(Section { containing_ffs, containing_extraction_buffer: None, header, meta_data, data })
-  }
-
-  /// Instantiate a new Section structure given the containing file and base address that is part of an extracted
-  /// section.
-  ///
-  /// ## Safety
-  /// Caller must ensure that base_address points to the start of a valid FFS section header and that it is safe to
-  /// access memory from the start of that header to the full length fo the section specified by that header. Caller
-  /// must also ensure that the memory containing the section data outlives this Section instance.
-  ///
-  /// Various sanity checks will be performed by this routine to ensure Section consistency.
-  pub unsafe fn new_in_extraction_buffer(
-    containing_ffs: File,
-    base_address: efi::PhysicalAddress,
-    extraction_buffer: &'static [u8],
-  ) -> Result<Section, efi::Status> {
-    let mut section = Self::new(containing_ffs, base_address)?;
-    section.containing_extraction_buffer = Some(extraction_buffer);
-    Ok(section)
-  }
-
-  /// Returns the base address in memory of this section.
-  ///
-  /// Note: if this is a section contained within an encapsulation section, then the base address of this section is not
-  /// guaranteed to be within the bounds of the containing [`File`]'s data buffer.
-  pub fn base_address(&self) -> efi::PhysicalAddress {
-    self.header.base_address()
-  }
-
-  #[cfg(test)]
-  pub fn container_offset(&self) -> usize {
-    if let Some(container_buffer) = self.containing_extraction_buffer {
-      (self.base_address() - container_buffer.as_ptr() as efi::PhysicalAddress) as usize
-    } else {
-      (self.base_address() - self.containing_ffs.containing_fv_base()) as usize
-    }
+    Ok(Section { containing_ffs, section_offset, section_header, meta_data, containing_buffer, section_data })
   }
 
   /// Returns the section type.
   pub fn section_type(&self) -> Option<FfsSection::Type> {
-    match self.header.section_type() {
+    match self.section_header.section_type() {
       FfsSectionRawType::encapsulated::COMPRESSION => Some(FfsSection::Type::Compression),
       FfsSectionRawType::encapsulated::GUID_DEFINED => Some(FfsSection::Type::GuidDefined),
       FfsSectionRawType::encapsulated::DISPOSABLE => Some(FfsSection::Type::Disposable),
@@ -516,12 +498,12 @@ impl Section {
 
   /// Returns the total section size (including the header and metadata, if any).
   pub fn section_size(&self) -> usize {
-    self.header.section_size()
+    self.section_header.section_size()
   }
 
   /// Returns the section data.
   pub fn section_data(&self) -> &[u8] {
-    self.data
+    self.section_data
   }
 
   /// Returns the section metadata.
@@ -538,60 +520,58 @@ impl Section {
   }
 
   /// Returns the containing FFS file for the given section.
-  pub fn containing_file(&self) -> File {
+  pub fn containing_file(&self) -> &'a File<'a> {
     self.containing_ffs
   }
 
   /// Returns the next section of the containing file.
-  pub fn next_section(&self) -> Option<Section> {
-    let mut next_section_address = self.base_address();
-    next_section_address += self.section_size() as efi::PhysicalAddress;
-
+  pub fn next_section(&self) -> Option<Section<'a>> {
     // per the PI spec, "The section headers aligned on 4 byte boundaries relative to the start of the file's image"
     // but, in fact, that just means "4-byte aligned" per the EDK2 implementation.
-    next_section_address = align_up(next_section_address, 0x4);
+    let next_section_offset = align_up((self.section_offset + self.section_size()) as u64, 0x4) as usize;
 
-    // check to see if we ran off the end of the file or containing extraction buffer yet.
-    let top_address = match self.containing_extraction_buffer {
-      Some(buffer) => buffer.as_ptr() as efi::PhysicalAddress + buffer.len() as efi::PhysicalAddress,
-      None => self.containing_file().top_address(),
-    };
-
-    if next_section_address
-      <= (top_address - mem::size_of::<FfsSectionHeader::CommonSectionHeaderStandard>() as efi::PhysicalAddress)
-    {
-      let mut next_section = unsafe { Section::new(self.containing_ffs, next_section_address).ok()? };
-      next_section.containing_extraction_buffer = self.containing_extraction_buffer;
-      return Some(next_section);
+    // check to see if the offset is off the end of the containing buffer.
+    if next_section_offset + mem::size_of::<CommonSectionHeaderStandard>() > self.containing_buffer.len() {
+      return None;
     }
-    None
+
+    Section::new(self.containing_ffs, next_section_offset, self.containing_buffer).ok()
   }
 }
 
-impl fmt::Debug for Section {
+impl<'a> fmt::Debug for Section<'a> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "Section @{:#x} type: {:x?} size: {:#x}", self.base_address(), self.section_type(), self.section_size())
+    write!(
+      f,
+      "Section @{:#x?} type: {:x?} size: {:#x}",
+      self.section_data().as_ptr(),
+      self.section_type(),
+      self.section_size()
+    )
   }
 }
 
 /// Iterator over sections within a file.
 pub struct FfsSectionIterator<'a> {
-  next_section: Option<Section>,
+  next_section: Option<Section<'a>>,
   extractor: Option<&'a dyn SectionExtractor>,
-  pending_encapsulated_sections: VecDeque<Section>,
+  pending_encapsulated_sections: VecDeque<Section<'a>>,
 }
 
 impl<'a> FfsSectionIterator<'a> {
   /// Create a new section iterator with a no-op section extractor.
   /// Can be used for FVs that contain files with only leaf sections; any encapsulation sections will not be unpacked.
-  pub fn new(start_section: Option<Section>) -> FfsSectionIterator<'a> {
+  pub fn new(start_section: Option<Section<'a>>) -> FfsSectionIterator<'a> {
     FfsSectionIterator { next_section: start_section, extractor: None, pending_encapsulated_sections: VecDeque::new() }
   }
 
   /// Create a new section iterator with the specified extractor.
   /// When the iterator encounters an encapsulated section the given extractor will be used to extract the sections it
   /// contains and they will be added to the front of the iterator queue.
-  pub fn new_with_extractor(start_section: Option<Section>, extractor: &dyn SectionExtractor) -> FfsSectionIterator {
+  pub fn new_with_extractor(
+    start_section: Option<Section<'a>>,
+    extractor: &'a dyn SectionExtractor,
+  ) -> FfsSectionIterator<'a> {
     FfsSectionIterator {
       next_section: start_section,
       extractor: Some(extractor),
@@ -601,8 +581,8 @@ impl<'a> FfsSectionIterator<'a> {
 }
 
 impl<'a> Iterator for FfsSectionIterator<'a> {
-  type Item = Section;
-  fn next(&mut self) -> Option<Section> {
+  type Item = Section<'a>;
+  fn next(&mut self) -> Option<Section<'a>> {
     let current = {
       if self.pending_encapsulated_sections.is_empty() {
         let current = self.next_section?;

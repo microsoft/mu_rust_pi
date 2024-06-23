@@ -15,8 +15,7 @@ pub mod file;
 
 extern crate alloc;
 
-use crate::address_helper::align_up;
-use alloc::string::ToString;
+use alloc::{string::ToString, vec::Vec};
 use core::{fmt, mem, num::Wrapping, slice};
 use r_efi::efi;
 use uuid::Uuid;
@@ -26,10 +25,7 @@ use crate::fw_fs::{
   fvb::attributes::EfiFvbAttributes2,
 };
 
-use super::ffs::{
-  file::Header as FfsFileHeader,
-  guid::{EFI_FIRMWARE_FILE_SYSTEM2_GUID, EFI_FIRMWARE_FILE_SYSTEM3_GUID},
-};
+use super::ffs::guid::{EFI_FIRMWARE_FILE_SYSTEM2_GUID, EFI_FIRMWARE_FILE_SYSTEM3_GUID};
 
 pub type EfiFvFileType = u8;
 
@@ -67,7 +63,7 @@ pub struct Header {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct BlockMapEntry {
   pub(crate) num_blocks: u32,
   pub(crate) length: u32,
@@ -83,83 +79,144 @@ pub(crate) struct ExtHeader {
 
 /// Firmware Volume
 #[derive(Copy, Clone)]
-pub struct FirmwareVolume {
-  fv_header: &'static Header,
+pub struct FirmwareVolume<'a> {
+  fv_data: &'a [u8],
 }
 
-impl FirmwareVolume {
-  /// Instantiate a new FirmwareVolume structure given the base address of an FV in memory.
-  ///
-  /// ## Safety
-  /// Caller must ensure that base_address points to the start of a valid FV header and that it is safe to access memory
-  /// from the start of that header to the full length specified by the FV header. Caller must also ensure that the
-  /// memory containing the FV outlives the FirmwareVolume instance.
-  ///
-  /// Various sanity checks will be performed by this routine to ensure FV consistency.
-  pub unsafe fn new(base_address: efi::PhysicalAddress) -> Result<FirmwareVolume, efi::Status> {
-    let fv_header = base_address as *const self::Header;
+impl<'a> FirmwareVolume<'a> {
+  /// Instantiate a new firmware volume instance
+  pub fn new(fv_data: &'a [u8]) -> Result<FirmwareVolume, efi::Status> {
+    //buffer must be large enough to hold the header structure.
+    if fv_data.len() < mem::size_of::<Header>() {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
 
-    // sanity checks
+    //Safety: buffer is large enough to contain the header, so can cast to a ref.
+    let fv_header = unsafe { &*(fv_data.as_ptr() as *const Header) };
 
     // signature: must be ASCII '_FVH'
-    if (*fv_header).signature != 0x4856465f {
+    if fv_header.signature != 0x4856465f {
       //'_FVH'
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
     // header_length: must be large enough to hold the header.
-    if (*fv_header).header_length < mem::size_of::<Header>().try_into().unwrap() {
+    if (fv_header.header_length as usize) < mem::size_of::<Header>() {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    // header_length: buffer must be large enough to hold the header.
+    if (fv_header.header_length as usize) > fv_data.len() {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
     // checksum: fv header must sum to zero (and must be multiple of 2 bytes)
-    if (*fv_header).header_length & 0x01 != 0 {
+    if fv_header.header_length & 0x01 != 0 {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
-    let header_size = (*fv_header).header_length / (mem::size_of::<u16>() as u16);
-    if Wrapping(0u16)
-      != slice::from_raw_parts(fv_header as *const u16, header_size as usize).iter().map(|&x| Wrapping(x)).sum()
-    {
+
+    let header_slice = &fv_data[..fv_header.header_length as usize];
+    let sum: Wrapping<u16> =
+      header_slice.chunks_exact(2).map(|x| Wrapping(u16::from_le_bytes(x.try_into().unwrap()))).sum();
+
+    if sum != Wrapping(0u16) {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
     // revision: must be at least 2. Assumes that if later specs bump the rev they will maintain
     // backwards compat with existing header definition.
-    if (*fv_header).revision < 2 {
+    if fv_header.revision < 2 {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
     // file_system_guid: must be EFI_FIRMWARE_FILE_SYSTEM2_GUID or EFI_FIRMWARE_FILE_SYSTEM3_GUID.
-    if (*fv_header).file_system_guid != EFI_FIRMWARE_FILE_SYSTEM2_GUID
-      && (*fv_header).file_system_guid != EFI_FIRMWARE_FILE_SYSTEM3_GUID
+    if fv_header.file_system_guid != EFI_FIRMWARE_FILE_SYSTEM2_GUID
+      && fv_header.file_system_guid != EFI_FIRMWARE_FILE_SYSTEM3_GUID
     {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
     // fv_length: must be large enough to hold the header.
-    if (*fv_header).fv_length < (*fv_header).header_length as u64 {
+    if fv_header.fv_length < fv_header.header_length as u64 {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    // fv_length: must be less than or equal to fv_data buffer length
+    if fv_header.fv_length > fv_data.len() as u64 {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
     //ext_header_offset: must be inside the fv
-    if (*fv_header).ext_header_offset as u64 > (*fv_header).fv_length {
+    if fv_header.ext_header_offset as u64 > fv_header.fv_length {
       Err(efi::Status::INVALID_PARAMETER)?;
     }
 
-    Ok(FirmwareVolume { fv_header: fv_header.as_ref().unwrap() })
+    //if ext_header is present, it's size must fit inside the FV.
+    if fv_header.ext_header_offset != 0 {
+      let ext_header_offset = fv_header.ext_header_offset as usize;
+      if ext_header_offset + mem::size_of::<ExtHeader>() > fv_data.len() {
+        Err(efi::Status::INVALID_PARAMETER)?;
+      }
+
+      //Safety: previous check ensures that fv_data is large enough to contain the ext_header
+      let ext_header = unsafe { &*(fv_data[ext_header_offset..].as_ptr() as *const ExtHeader) };
+
+      if ext_header_offset + ext_header.ext_header_size as usize > fv_data.len() {
+        Err(efi::Status::INVALID_PARAMETER)?;
+      }
+    }
+
+    //block map must fit within the fv header (which is checked above to guarantee it is within the fv_data buffer).
+    let block_map = &fv_data[mem::size_of::<Header>()..fv_header.header_length as usize];
+
+    //block map should be a multiple of 8 in size
+    if block_map.len() & 0x7 != 0 {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    let block_map = block_map
+      .chunks_exact(8)
+      .map(|x| BlockMapEntry {
+        num_blocks: u32::from_le_bytes(x[..4].try_into().unwrap()),
+        length: u32::from_le_bytes(x[4..].try_into().unwrap()),
+      })
+      .collect::<Vec<_>>();
+
+    //block map should terminate with zero entry
+    if block_map.last() != Some(&BlockMapEntry { num_blocks: 0, length: 0 }) {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    //other entries in block map must be non-zero.
+    if block_map[..block_map.len() - 1].iter().any(|x| x == &BlockMapEntry { num_blocks: 0, length: 0 }) {
+      Err(efi::Status::INVALID_PARAMETER)?;
+    }
+
+    Ok(FirmwareVolume { fv_data })
   }
 
-  fn ext_header(&self) -> Option<&'static ExtHeader> {
-    if self.fv_header.ext_header_offset == 0 {
+  fn header(&self) -> &'a Header {
+    // Safety: construction in new() guarantees that header in the data buffer is valid, so it is safe to re-cast it to
+    // the appropriate type and hand out a shared ref to it.
+    let fv_header = self.fv_data.as_ptr() as *const Header;
+    unsafe { &*fv_header }
+  }
+
+  fn ext_header(&self) -> Option<&'a ExtHeader> {
+    if self.header().ext_header_offset == 0 {
       return None;
     }
-    unsafe {
-      ((self.base_address() + self.fv_header.ext_header_offset as efi::PhysicalAddress) as *const ExtHeader).as_ref()
-    }
+
+    // Safety: construction in new() guarantees that if ext_header exists it fits in the fv_data buffer, so it is safe
+    //to re-cast it to the appropriate type and hand out a shared ref to it.
+    let ext_header = self.fv_data[self.header().ext_header_offset as usize..].as_ptr() as *const ExtHeader;
+    unsafe { Some(&*ext_header) }
   }
 
-  fn block_map(&self) -> &'static [BlockMapEntry] {
-    let block_map_start = self.fv_header.block_map.as_ptr();
+  fn block_map(&self) -> &'a [BlockMapEntry] {
+    //Safety: construction in new() guarantees that the block map fits within the fv_header and is therefore within the
+    //fv_data buffer, so it is safe to build a slice from it and hand out a shared ref.
+    let block_map_start = self.header().block_map.as_ptr();
     let mut count = 0;
     let mut current_block_map_ptr = block_map_start;
 
@@ -173,6 +230,10 @@ impl FirmwareVolume {
     }
   }
 
+  pub fn fv_data_buffer(&self) -> &'a [u8] {
+    self.fv_data
+  }
+
   /// Returns the GUID name of the Firmware Volume
   pub fn fv_name(&self) -> Option<efi::Guid> {
     if let Some(ext_header) = self.ext_header() {
@@ -181,45 +242,28 @@ impl FirmwareVolume {
     None
   }
 
-  /// Returns the first file in the Firmware Volume
-  pub fn first_ffs_file(&self) -> Option<FfsFile> {
-    let mut ffs_address = self.base_address();
-    if let Some(ext_header) = self.ext_header() {
-      // if ext header exists, then file starts after ext header
-      ffs_address += self.fv_header.ext_header_offset as efi::PhysicalAddress;
-      ffs_address += ext_header.ext_header_size as efi::PhysicalAddress;
-    } else {
-      // otherwise the file starts after the main header.
-      ffs_address += self.fv_header.header_length as efi::PhysicalAddress
-    }
-    ffs_address = align_up(ffs_address, 0x8);
-
-    //Check the case where the FV contains no files.
-    if ffs_address + mem::size_of::<FfsFileHeader>() as efi::PhysicalAddress >= self.top_address() {
-      None
-    } else {
-      unsafe { FfsFile::new(*self, ffs_address).ok() }
-    }
+  pub fn first_ffs_file(&'a self) -> Option<FfsFile<'a>> {
+    let first_file_offset = match self.ext_header() {
+      Some(ext_header) => {
+        // if ext header exists, then file starts after ext header
+        self.header().ext_header_offset as usize + ext_header.ext_header_size as usize
+      }
+      None => {
+        // otherwise the file starts after the fv_header.
+        self.header().header_length as usize
+      }
+    };
+    FfsFile::new(self, first_file_offset).ok()
   }
 
   /// Returns an iterator over all files in the firmware volume.
-  pub fn ffs_files(&self) -> impl Iterator<Item = FfsFile> {
+  pub fn ffs_files(&'a self) -> impl Iterator<Item = FfsFile<'a>> {
     FfsFileIterator::new(self.first_ffs_file())
-  }
-
-  /// Returns the base address in memory of the firmware volume.
-  pub fn base_address(&self) -> efi::PhysicalAddress {
-    self.fv_header as *const Header as efi::PhysicalAddress
-  }
-
-  /// returns the memory address of the end of the firmware volume (not inclusive)
-  pub fn top_address(&self) -> efi::PhysicalAddress {
-    self.base_address() + self.fv_header.fv_length
   }
 
   /// returns the Firmware Volume Attributes
   pub fn attributes(&self) -> EfiFvbAttributes2 {
-    self.fv_header.attributes
+    self.header().attributes
   }
 
   /// returns the (linear block offset from FV base, block_size, remaining_blocks) given an LBA.
@@ -248,13 +292,13 @@ impl FirmwareVolume {
   }
 }
 
-impl fmt::Debug for FirmwareVolume {
+impl<'a> fmt::Debug for FirmwareVolume<'a> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(
       f,
-      "FirmwareVolume@{:#x}-{:#x} name: {:}",
-      self.base_address(),
-      self.top_address(),
+      "FirmwareVolume@{:#p} size {:#x} name: {:}",
+      self.fv_data.as_ptr(),
+      self.fv_data.len(),
       match self.fv_name() {
         Some(guid) => Uuid::from_bytes_le(*guid.as_bytes()).to_string(),
         None => "Unspecified".to_string(),
