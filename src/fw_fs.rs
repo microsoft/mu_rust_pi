@@ -13,7 +13,7 @@
 
 extern crate alloc;
 
-use core::{fmt, mem, num::Wrapping};
+use core::{fmt, mem, num::Wrapping, slice};
 
 pub mod ffs;
 pub mod fv;
@@ -287,6 +287,32 @@ impl FirmwareVolume {
     let erase_byte = if fv_header.attributes & Fvb2RawAttributes::ERASE_POLARITY != 0 { 0xff } else { 0 };
 
     Ok(Self { block_map, ext_header, files: Self::enumerate_files(&buffer[data_offset..], erase_byte, extractor)? })
+  }
+
+  /// Instantiate a new FirmwareVolume from a base address.
+  ///
+  /// ## Safety
+  /// Caller must ensure that base_address is the address of the start of a firmware volume.
+  ///
+  /// Contents of the FirmwareVolume will be cached in this instance, encapsulation sections will not be unpacked.
+  pub unsafe fn new_from_address(base_address: u64) -> Result<Self, efi::Status> {
+    Self::new_from_address_with_extractor(base_address, &NullSectionExtractor {})
+  }
+
+  /// Instantiate a new FirmwareVolume with the given section extractor.
+  ///
+  /// ## Safety
+  /// Caller must ensure that base_address is the address of the start of a firmware volume.
+  ///
+  /// Contents of the FirmwareVolume will be cached in this instance, encapsulation sections will be unpacked using
+  /// the provided section extractor.
+  pub unsafe fn new_from_address_with_extractor(
+    base_address: u64,
+    extractor: &dyn SectionExtractor,
+  ) -> Result<Self, efi::Status> {
+    let fv_header = &*(base_address as *const fv::Header);
+    let fv_buffer = slice::from_raw_parts(base_address as *const u8, fv_header.fv_length as usize);
+    Self::new_with_extractor(fv_buffer, extractor)
   }
 
   /// Returns the block map for the FV
