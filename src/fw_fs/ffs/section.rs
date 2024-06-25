@@ -68,7 +68,7 @@ pub enum Type {
 }
 
 /// EFI_COMMON_SECTION_HEADER per PI spec 1.8A 3.2.4.1
-/// #[repr(C)]
+#[repr(C)]
 #[derive(Debug)]
 pub struct Header {
   pub size: [u8; 3],

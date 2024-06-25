@@ -331,7 +331,7 @@ impl FirmwareVolume {
   }
 
   /// returns the (linear block offset from FV base, block_size, remaining_blocks) given an LBA.
-  pub fn get_lba_info(&self, lba: u32) -> Result<(u32, u32, u32), efi::Status> {
+  pub fn lba_info(&self, lba: u32) -> Result<(u32, u32, u32), efi::Status> {
     let block_map = self.block_map();
 
     let mut total_blocks = 0;
