@@ -39,6 +39,7 @@ pub use fv::{
 pub use fvb::attributes::{raw::fvb2 as Fvb2RawAttributes, EfiFvbAttributes2, Fvb2 as Fvb2Attributes};
 
 use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
+use num_traits::WrappingSub;
 use r_efi::efi;
 
 use crate::address_helper::align_up;
@@ -164,22 +165,22 @@ impl FirmwareVolume {
     // signature: must be ASCII '_FVH'
     if fv_header.signature != 0x4856465f {
       //'_FVH'
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     // header_length: must be large enough to hold the header.
     if (fv_header.header_length as usize) < mem::size_of::<fv::Header>() {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     // header_length: buffer must be large enough to hold the header.
     if (fv_header.header_length as usize) > buffer.len() {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     // checksum: fv header must sum to zero (and must be multiple of 2 bytes)
     if fv_header.header_length & 0x01 != 0 {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     let header_slice = &buffer[..fv_header.header_length as usize];
@@ -187,13 +188,13 @@ impl FirmwareVolume {
       header_slice.chunks_exact(2).map(|x| Wrapping(u16::from_le_bytes(x.try_into().unwrap()))).sum();
 
     if sum != Wrapping(0u16) {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     // revision: must be at least 2. Assumes that if later specs bump the rev they will maintain
     // backwards compat with existing header definition.
     if fv_header.revision < 2 {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     // file_system_guid: must be EFI_FIRMWARE_FILE_SYSTEM2_GUID or EFI_FIRMWARE_FILE_SYSTEM3_GUID.
@@ -205,32 +206,32 @@ impl FirmwareVolume {
 
     // fv_length: must be large enough to hold the header.
     if fv_header.fv_length < fv_header.header_length as u64 {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     // fv_length: must be less than or equal to fv_data buffer length
     if fv_header.fv_length > buffer.len() as u64 {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     //ext_header_offset: must be inside the fv
     if fv_header.ext_header_offset as u64 > fv_header.fv_length {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
-    //if ext_header is present, it's size must fit inside the FV.
+    //if ext_header is present, its size must fit inside the FV.
     let ext_header = {
       if fv_header.ext_header_offset != 0 {
         let ext_header_offset = fv_header.ext_header_offset as usize;
         if ext_header_offset + mem::size_of::<fv::ExtHeader>() > buffer.len() {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
 
         //Safety: previous check ensures that fv_data is large enough to contain the ext_header
         let ext_header = unsafe { &*(buffer[ext_header_offset..].as_ptr() as *const fv::ExtHeader) };
         let ext_header_end = ext_header_offset + ext_header.ext_header_size as usize;
         if ext_header_end > buffer.len() {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
         Some((*ext_header, Box::from(&buffer[ext_header_offset..ext_header_end])))
       } else {
@@ -243,7 +244,7 @@ impl FirmwareVolume {
 
     //block map should be a multiple of 8 in size
     if block_map.len() & 0x7 != 0 {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     let mut block_map = block_map
@@ -256,7 +257,7 @@ impl FirmwareVolume {
 
     //block map should terminate with zero entry
     if block_map.last() != Some(&fv::BlockMapEntry { num_blocks: 0, length: 0 }) {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     //remove the terminator.
@@ -264,12 +265,12 @@ impl FirmwareVolume {
 
     //thre must be at least one valid entry in the block map.
     if block_map.is_empty() {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     //other entries in block map must be non-zero.
     if block_map.iter().any(|x| x == &fv::BlockMapEntry { num_blocks: 0, length: 0 }) {
-      Err(efi::Status::INVALID_PARAMETER)?;
+      Err(efi::Status::VOLUME_CORRUPTED)?;
     }
 
     let data_offset = {
@@ -389,7 +390,7 @@ impl File {
     let file_header = unsafe { &*(buffer.as_ptr() as *const file::Header) };
 
     // determine size and data offset
-    let (data_offset, size) = {
+    let (header_size, size) = {
       let header_size = mem::size_of::<file::Header>();
       if (file_header.attributes & LARGE_FILE) == 0 {
         //standard header with 24-bit size
@@ -401,21 +402,64 @@ impl File {
         //extended header with 64-bit size
         let extended_size_length = mem::size_of::<u64>();
         if buffer[header_size..].len() < extended_size_length {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
         let size = u64::from_le_bytes(buffer[header_size..header_size + extended_size_length].try_into().unwrap());
         (header_size + extended_size_length, size as u64)
       }
     };
 
-    //TODO: implement integrity check.
+    // Verify that the total size of the file fits within the buffer.
+    if size as usize > buffer.len() {
+      Err(efi::Status::VOLUME_CORRUPTED)?;
+    }
+
+    // Interpreting the state field requires knowledge of the EFI_FVB_ERASE_POLARITY from the FV header, which is not
+    // available here unless the constructor API is modified to specify it. So it is inferred based on the state of
+    // the reserved bits in the EFI_FFS_FILE_STATE which spec requires to be set to EFI_FVB_ERASE_POLARITY.
+    // This implementation does not support FV modification, so the only valid state is EFI_FILE_DATA_VALID.
+    if (file_header.state & 0x80) == 0 {
+      //erase polarity = 0. Verify DATA_VALID is set, and no higher-order bits are set.
+      if file_header.state & 0xFC != ffs::file::raw::state::DATA_VALID {
+        //file is not in EFI_FILE_DATA_VALID state.
+        Err(efi::Status::VOLUME_CORRUPTED)?;
+      }
+    } else {
+      //erase polarity = 1. Verify DATA_VALID is clear, and no higher-order bits are clear.
+      if (!file_header.state) & 0xFC != ffs::file::raw::state::DATA_VALID {
+        //file is not in EFI_FILE_DATA_VALID state.
+        Err(efi::Status::VOLUME_CORRUPTED)?;
+      }
+    }
+
+    //Verify the header checksum.
+    let header_sum: Wrapping<u8> = buffer[..header_size].iter().map(|&x| Wrapping(x)).sum();
+    // integrity_check_file and state are assumed to be zero for checksum, so subtract them here.
+    let header_sum = header_sum.wrapping_sub(&Wrapping(file_header.integrity_check_file));
+    let header_sum = header_sum.wrapping_sub(&Wrapping(file_header.state));
+    if header_sum != Wrapping(0u8) {
+      Err(efi::Status::VOLUME_CORRUPTED)?;
+    }
+
+    //Verify the file data checksum.
+    if file_header.attributes & ffs::attributes::raw::CHECKSUM != 0 {
+      let data_sum: Wrapping<u8> = buffer[header_size..size as usize].iter().map(|&x| Wrapping(x)).sum();
+      if data_sum != Wrapping(0u8) {
+        Err(efi::Status::VOLUME_CORRUPTED)?;
+      }
+    } else {
+      // Verify that the checksum is initialized to 0xAA per spec requirements when CHECKSUM attribute is cleared.
+      if file_header.integrity_check_file != 0xAA {
+        Err(efi::Status::VOLUME_CORRUPTED)?;
+      }
+    }
 
     Ok(Self {
       name: file_header.name,
       file_type: file_header.file_type,
       attributes: file_header.attributes,
       size,
-      sections: Self::enumerate_sections(&buffer[data_offset..size as usize], extractor)?,
+      sections: Self::enumerate_sections(&buffer[header_size..size as usize], extractor)?,
     })
   }
 
@@ -560,7 +604,7 @@ impl Section {
       if section_header.size.iter().all(|&x| x == 0xff) {
         //extended header - confirm there is space for extended size
         if buffer.len() < header_end + mem::size_of::<u32>() {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
         let size = u32::from_le_bytes(buffer[header_end..header_end + mem::size_of::<u32>()].try_into().unwrap());
         (size as usize, header_end + mem::size_of::<u32>())
@@ -578,7 +622,7 @@ impl Section {
         let compression_header_size = mem::size_of::<section::header::Compression>();
         //verify that buffer has enough storage for a compression header.
         if buffer.len() < content_offset + compression_header_size {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
         //Safety: buffer is large enough to hold compression header
         let compression_header =
@@ -590,7 +634,7 @@ impl Section {
         let guid_defined_header_size = mem::size_of::<section::header::Compression>();
         //verify that buffer has enough storage for a guid_defined header.
         if buffer.len() < content_offset + guid_defined_header_size {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
         //Safety: buffer is large enough to hold guid_defined header
         let guid_defined = unsafe { &*(buffer[content_offset..].as_ptr() as *const section::header::GuidDefined) };
@@ -598,7 +642,7 @@ impl Section {
         //verify that buffer has enough storage for guid-specific fields.
         let data_offset = guid_defined.data_offset as usize;
         if buffer.len() < data_offset {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
 
         let guid_specific_header_fields: Box<[u8]> =
@@ -611,7 +655,7 @@ impl Section {
         let version_header_size = mem::size_of::<section::header::Version>();
         //verify that buffer has enough storage for a version header.
         if buffer.len() < content_offset + version_header_size {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
         //Safety: buffer is large enough to hold version header
         let version_header = unsafe { &*(buffer[content_offset..].as_ptr() as *const section::header::Version) };
@@ -622,7 +666,7 @@ impl Section {
         let freeform_header_size = mem::size_of::<section::header::FreeformSubtypeGuid>();
         //verify that buffer has enough storage for a freeform header.
         if buffer.len() < content_offset + freeform_header_size {
-          Err(efi::Status::INVALID_PARAMETER)?;
+          Err(efi::Status::VOLUME_CORRUPTED)?;
         }
         //Safety: buffer is large enough to hold freeform header
         let freeform_header =
@@ -981,7 +1025,7 @@ mod unit_tests {
     unsafe {
       (*fv_header).signature ^= 0xdeadbeef;
     };
-    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::INVALID_PARAMETER);
+    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::VOLUME_CORRUPTED);
 
     // bogus header_length.
     let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
@@ -989,7 +1033,7 @@ mod unit_tests {
     unsafe {
       (*fv_header).header_length = 0;
     };
-    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::INVALID_PARAMETER);
+    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::VOLUME_CORRUPTED);
 
     // bogus checksum.
     let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
@@ -997,7 +1041,7 @@ mod unit_tests {
     unsafe {
       (*fv_header).checksum ^= 0xbeef;
     };
-    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::INVALID_PARAMETER);
+    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::VOLUME_CORRUPTED);
 
     // bogus revision.
     let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
@@ -1005,7 +1049,7 @@ mod unit_tests {
     unsafe {
       (*fv_header).revision = 1;
     };
-    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::INVALID_PARAMETER);
+    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::VOLUME_CORRUPTED);
 
     // bogus filesystem guid.
     let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
@@ -1013,7 +1057,7 @@ mod unit_tests {
     unsafe {
       (*fv_header).file_system_guid = efi::Guid::from_bytes(&[0xa5; 16]);
     };
-    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::INVALID_PARAMETER);
+    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::VOLUME_CORRUPTED);
 
     // bogus fv length.
     let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
@@ -1021,7 +1065,7 @@ mod unit_tests {
     unsafe {
       (*fv_header).fv_length = 0;
     };
-    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::INVALID_PARAMETER);
+    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::VOLUME_CORRUPTED);
 
     // bogus ext header offset.
     let mut fv_bytes = fs::read(root.join("DXEFV.Fv"))?;
@@ -1029,7 +1073,7 @@ mod unit_tests {
     unsafe {
       (*fv_header).fv_length = ((*fv_header).ext_header_offset - 1) as u64;
     };
-    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::INVALID_PARAMETER);
+    assert_eq!(FirmwareVolume::new(&fv_bytes).unwrap_err(), efi::Status::VOLUME_CORRUPTED);
 
     Ok(())
   }
