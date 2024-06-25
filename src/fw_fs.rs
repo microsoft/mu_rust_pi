@@ -113,6 +113,7 @@ impl SectionExtractor for NullSectionExtractor {
 ///```
 #[derive(Debug, Clone)]
 pub struct FirmwareVolume {
+  attributes: EfiFvbAttributes2,
   block_map: Vec<fv::BlockMapEntry>,
   ext_header: Option<(fv::ExtHeader, Box<[u8]>)>,
   files: Vec<File>,
@@ -286,7 +287,12 @@ impl FirmwareVolume {
     let data_offset = align_up(data_offset as u64, 8) as usize;
     let erase_byte = if fv_header.attributes & Fvb2RawAttributes::ERASE_POLARITY != 0 { 0xff } else { 0 };
 
-    Ok(Self { block_map, ext_header, files: Self::enumerate_files(&buffer[data_offset..], erase_byte, extractor)? })
+    Ok(Self {
+      attributes: fv_header.attributes,
+      block_map,
+      ext_header,
+      files: Self::enumerate_files(&buffer[data_offset..], erase_byte, extractor)?,
+    })
   }
 
   /// Instantiate a new FirmwareVolume from a base address.
@@ -353,6 +359,11 @@ impl FirmwareVolume {
 
     let remaining_blocks = total_blocks - lba;
     Ok((offset + lba * block_size, block_size, remaining_blocks))
+  }
+
+  /// Returns the attributes for the FirmwareVolume
+  pub fn attributes(&self) -> EfiFvbAttributes2 {
+    self.attributes
   }
 
   // Enumerates the files within the volume and populates the file vector.
