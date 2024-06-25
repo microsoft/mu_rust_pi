@@ -777,7 +777,6 @@ impl<'a> Iterator for FvFileIterator<'a> {
     {
       return None;
     }
-    extern crate std;
     let result = File::new_with_extractor(&self.buffer[self.next_offset..], self.extractor);
     if let Ok(ref file) = result {
       // per the PI spec, "Given a file F, the next file FvHeader is located at the next 8-byte aligned firmware volume
