@@ -782,7 +782,7 @@ impl<'a> Iterator for FvFileIterator<'a> {
     if let Ok(ref file) = result {
       // per the PI spec, "Given a file F, the next file FvHeader is located at the next 8-byte aligned firmware volume
       // offset following the last byte the file F"
-      self.next_offset = align_up(self.next_offset as u64 + file.size() as u64, 8) as usize;
+      self.next_offset = align_up(self.next_offset as u64 + file.size(), 8) as usize;
     } else {
       self.error = true;
     }

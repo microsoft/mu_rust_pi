@@ -4,7 +4,6 @@ use brotli_decompressor::{BrotliDecompressStream, BrotliResult, BrotliState, Huf
 use mu_pi::fw_fs::{FirmwareVolume, SectionExtractor, SectionMetaData};
 use r_efi::efi;
 use std::{env, error::Error, fmt::Debug, fs, path::Path};
-use uuid;
 
 //Rebox and HeapAllocator satisfy BrotliDecompress custom allocation requirement.
 struct Rebox<T>(Box<[T]>);
@@ -80,7 +79,7 @@ impl SectionExtractor for BrotliSectionExtractor {
         }
       }
     }
-    return Ok(Box::new([0u8; 0]));
+    Ok(Box::new([0u8; 0]))
   }
 }
 
