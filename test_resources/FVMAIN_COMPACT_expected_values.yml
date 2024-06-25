@@ -2,7 +2,6 @@ total_number_of_files: 1
 files_to_test:
   # GUID of the File (need to be uppercase)
   "9E21FD93-9C72-4C15-8C4B-E77F1DB2D792":
-    base_address: 0x78
     file_type: 0xB
     attributes: 0x0
     # Body size in UEFITool
@@ -15,5 +14,4 @@ files_to_test:
       # Index of the section in the file (Not required to defined every section)
       0:
         section_type: "GuidDefined"
-        base_address: 0x90
-        size: 0x318599
+        size: 0x318581

@@ -1,12 +1,10 @@
 extern crate mu_pi;
 use alloc_no_stdlib::{self, define_index_ops_mut, SliceWrapper, SliceWrapperMut};
 use brotli_decompressor::{BrotliDecompressStream, BrotliResult, BrotliState, HuffmanCode};
-use mu_pi::fw_fs::{
-  ffs::{FfsSectionIterator, Section, SectionExtractor, SectionMetaData},
-  FirmwareVolume,
-};
+use mu_pi::fw_fs::{FirmwareVolume, SectionExtractor, SectionMetaData};
 use r_efi::efi;
-use std::{env, error::Error, fs, path::Path};
+use std::{env, error::Error, fmt::Debug, fs, path::Path};
+use uuid;
 
 //Rebox and HeapAllocator satisfy BrotliDecompress custom allocation requirement.
 struct Rebox<T>(Box<[T]>);
@@ -49,9 +47,9 @@ pub const BROTLI_SECTION_GUID: efi::Guid =
 struct BrotliSectionExtractor {}
 
 impl SectionExtractor for BrotliSectionExtractor {
-  fn extract(&self, section: Section) -> Vec<Section> {
-    if let SectionMetaData::GuidDefined(meta_data) = section.metadata() {
-      if meta_data.section_definition_guid == BROTLI_SECTION_GUID {
+  fn extract(&self, section: &mu_pi::fw_fs::Section) -> Result<Box<[u8]>, efi::Status> {
+    if let SectionMetaData::GuidDefined(guid_header, _) = section.meta_data() {
+      if guid_header.section_definition_guid == BROTLI_SECTION_GUID {
         let data = section.section_data();
         let out_size = u64::from_le_bytes(data[0..8].try_into().unwrap());
         let _scratch_size = u64::from_le_bytes(data[8..16].try_into().unwrap());
@@ -76,36 +74,50 @@ impl SectionExtractor for BrotliSectionExtractor {
         );
 
         if matches!(result, BrotliResult::ResultSuccess) {
-          // deliberate leak - memory must remain valid for 'static since Section instances it produces use &'static
-          // references to it.
-          let out_buffer_ptr = Box::into_raw(out_data.into_boxed_slice());
-          let out_buffer_static_ref = unsafe { out_buffer_ptr.as_ref().unwrap() };
-          if let Ok(first_encapsulated_section) = unsafe {
-            Section::new_in_extraction_buffer(
-              section.containing_file(),
-              out_buffer_ptr as *const u8 as efi::PhysicalAddress,
-              out_buffer_static_ref,
-            )
-          } {
-            return FfsSectionIterator::new_with_extractor(
-              Some(first_encapsulated_section),
-              &BrotliSectionExtractor {},
-            )
-            .collect();
-          }
+          return Ok(out_data.into_boxed_slice());
+        } else {
+          return Err(efi::Status::VOLUME_CORRUPTED);
         }
       }
     }
-    Vec::new()
+    return Ok(Box::new([0u8; 0]));
+  }
+}
+
+struct PrettyMetaData<'a>(&'a SectionMetaData);
+
+impl<'a> Debug for PrettyMetaData<'a> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match &self.0 {
+      SectionMetaData::GuidDefined(guid_header, _) => f
+        .debug_struct("GuidDefined")
+        .field("section_definition_guid", &uuid::Uuid::from_bytes(*guid_header.section_definition_guid.as_bytes()))
+        .finish_non_exhaustive(),
+      section => f.write_fmt(format_args!("{:?}", section)),
+    }
   }
 }
 
 fn print_fv(fv: FirmwareVolume) {
-  println!("Firmware Volume:");
-  for ffs_file in fv.ffs_files() {
-    println!("  file: {:x?}", ffs_file);
-    for section in ffs_file.ffs_sections_with_extractor(&BrotliSectionExtractor {}) {
-      println!("    section: {:x?}", section);
+  println!("FV: {:x?}", fv.fv_name().map(|x| uuid::Uuid::from_bytes(*x.as_bytes())));
+  println!("  BlockMap: {:x?}", fv.block_map());
+  println!("  Files: ");
+  for (file_idx, file) in fv.files().iter().enumerate() {
+    println!(
+      "    ({:?}, name: {:x?}, type: {:?}, size: {:x?})",
+      file_idx,
+      uuid::Uuid::from_bytes(*file.name().as_bytes()),
+      file.file_type(),
+      file.size()
+    );
+    println!("    Sections:");
+    for (section_idx, section) in file.sections().iter().enumerate() {
+      println!(
+        "      ({:?}, type: {:?}, metadata: {:x?}",
+        section_idx,
+        section.section_type(),
+        PrettyMetaData(section.meta_data())
+      );
     }
   }
 }
@@ -114,8 +126,9 @@ fn main() -> Result<(), Box<dyn Error>> {
   let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
 
   let fv_bytes = fs::read(root.join("FVMAIN_COMPACT.Fv"))?;
-  let fv = unsafe { FirmwareVolume::new(fv_bytes.as_ptr() as efi::PhysicalAddress).unwrap() };
+  let fv = FirmwareVolume::new_with_extractor(&fv_bytes, &BrotliSectionExtractor {}).unwrap();
 
   print_fv(fv);
+
   Ok(())
 }
