@@ -101,7 +101,7 @@ fn print_fv(mut fv: FirmwareVolume) {
   println!("FV: {:x?}", fv.fv_name().map(|x| uuid::Uuid::from_bytes(*x.as_bytes())));
   println!("  BlockMap: {:x?}", fv.block_map());
   println!("  Files: ");
-  for (file_idx, file) in fv.enumerate_all_with_extractor(&BrotliSectionExtractor {}).unwrap().iter_mut().enumerate() {
+  for (file_idx, file) in fv.enumerate_all_with_extractor(&BrotliSectionExtractor {}).unwrap().iter().enumerate() {
     println!(
       "    ({:?}, name: {:x?}, type: {:?}, size: {:x?})",
       file_idx,

@@ -64,8 +64,8 @@ use crate::address_helper::align_up;
 /// # let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
 /// # let fv_bytes = fs::read(root.join("GIGANTOR.Fv"))?;
 /// let mut fv = FirmwareVolume::new(&fv_bytes).expect("Firmware Volume Corrupt");
-/// for file in fv.enumerate_files().expect("file parse error").iter_mut() {
-///   file.enumerate_sections_with_extractor(&ExampleSectionExtractor{}).expect("section parse error");
+/// for file in fv.enumerate_files().expect("file parse error").iter() {
+///   let _sections = file.clone().enumerate_sections_with_extractor(&ExampleSectionExtractor{}).expect("section parse error");
 /// }
 /// println!("{:#x?}", fv);
 /// # Ok(())
@@ -98,6 +98,21 @@ impl SectionExtractor for NullSectionExtractor {
   }
 }
 
+#[derive(Clone)]
+pub struct FirmwareVolumeExtHeader<'a> {
+  header: fv::ExtHeader,
+  data: &'a [u8],
+}
+
+impl<'a> fmt::Debug for FirmwareVolumeExtHeader<'a> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("FirmwareVolumeExtHeader")
+      .field("header", &self.header)
+      .field("data.len()", &self.data.len())
+      .finish_non_exhaustive()
+  }
+}
+
 /// Firmware Volume access support
 ///
 /// Provides access to firmware volume contents.
@@ -115,21 +130,21 @@ impl SectionExtractor for NullSectionExtractor {
 /// # }
 ///```
 #[derive(Clone)]
-pub struct FirmwareVolume {
+pub struct FirmwareVolume<'a> {
+  data: &'a [u8],
   attributes: EfiFvbAttributes2,
   block_map: Vec<fv::BlockMapEntry>,
-  ext_header: Option<(fv::ExtHeader, Box<[u8]>)>,
+  ext_header: Option<FirmwareVolumeExtHeader<'a>>,
   data_offset: usize,
   erase_byte: u8,
-  data: Box<[u8]>,
-  files: Vec<File>,
+  files: Vec<File<'a>>,
 }
 
-impl FirmwareVolume {
+impl<'a> FirmwareVolume<'a> {
   /// Instantiate a new FirmwareVolume.
   ///
   /// Contents of the FirmwareVolume will be cached in this instance, encapsulation sections will not be unpacked.
-  pub fn new(buffer: &[u8]) -> Result<Self, efi::Status> {
+  pub fn new(buffer: &'a [u8]) -> Result<Self, efi::Status> {
     //buffer must be large enough to hold the header structure.
     if buffer.len() < mem::size_of::<fv::Header>() {
       Err(efi::Status::INVALID_PARAMETER)?;
@@ -209,7 +224,7 @@ impl FirmwareVolume {
         if ext_header_end > buffer.len() {
           Err(efi::Status::VOLUME_CORRUPTED)?;
         }
-        Some((*ext_header, Box::from(&buffer[ext_header_offset..ext_header_end])))
+        Some(FirmwareVolumeExtHeader { header: *ext_header, data: &buffer[ext_header_offset..ext_header_end] })
       } else {
         None
       }
@@ -250,9 +265,9 @@ impl FirmwareVolume {
     }
 
     let data_offset = {
-      if let Some((ext_header, _)) = ext_header {
+      if let Some(ext_header) = &ext_header {
         // if ext header exists, then data starts after ext header
-        fv_header.ext_header_offset as usize + ext_header.ext_header_size as usize
+        fv_header.ext_header_offset as usize + ext_header.header.ext_header_size as usize
       } else {
         // otherwise data starts after the fv_header.
         fv_header.header_length as usize
@@ -263,12 +278,12 @@ impl FirmwareVolume {
     let erase_byte = if fv_header.attributes & Fvb2RawAttributes::ERASE_POLARITY != 0 { 0xff } else { 0 };
 
     Ok(Self {
+      data: buffer,
       attributes: fv_header.attributes,
       block_map,
       ext_header,
       data_offset,
       erase_byte,
-      data: Box::from(buffer),
       files: Vec::new(),
     })
   }
@@ -292,7 +307,7 @@ impl FirmwareVolume {
 
   /// Returns the GUID name of the FV, if any.
   pub fn fv_name(&self) -> Option<efi::Guid> {
-    self.ext_header.as_ref().map(|(header, _)| header.fv_name)
+    self.ext_header.as_ref().map(|ext_header| ext_header.header.fv_name)
   }
 
   /// Returns the files in the FV.
@@ -300,34 +315,26 @@ impl FirmwareVolume {
     &self.files
   }
 
-  /// Returns a mutable reference to the files vector.
-  pub fn files_mut(&mut self) -> &mut Vec<File> {
-    &mut self.files
-  }
-
   /// Enumerates the files in the FirmwareVolume.
-  pub fn enumerate_files(&mut self) -> Result<&mut Vec<File>, efi::Status> {
+  pub fn enumerate_files(&mut self) -> Result<&Vec<File>, efi::Status> {
     let files: Result<Vec<File>, efi::Status> =
       FvFileIterator::new(&self.data[self.data_offset..], self.erase_byte).collect();
     self.files = files?;
-    Ok(&mut self.files)
+    Ok(&self.files)
   }
 
   /// Enumerates the files and sections in the FirmwareVolume. Encapsulation sections will not be extracted.
-  pub fn enumerate_all(&mut self) -> Result<&mut Vec<File>, efi::Status> {
+  pub fn enumerate_all(&mut self) -> Result<&Vec<File>, efi::Status> {
     self.enumerate_all_with_extractor(&NullSectionExtractor {})
   }
 
   /// Enumerates the files and sections in the FirmwareVolume, using the specified section extractor.
-  pub fn enumerate_all_with_extractor(
-    &mut self,
-    extractor: &dyn SectionExtractor,
-  ) -> Result<&mut Vec<File>, efi::Status> {
+  pub fn enumerate_all_with_extractor(&mut self, extractor: &dyn SectionExtractor) -> Result<&Vec<File>, efi::Status> {
     self.enumerate_files()?;
     for file in self.files.iter_mut() {
       file.enumerate_sections_with_extractor(extractor)?;
     }
-    Ok(&mut self.files)
+    Ok(&self.files)
   }
 
   /// returns the (linear block offset from FV base, block_size, remaining_blocks) given an LBA.
@@ -364,9 +371,14 @@ impl FirmwareVolume {
   pub fn size(&self) -> u64 {
     self.data.len() as u64
   }
+
+  /// Returns the FV data.
+  pub fn data(&self) -> &[u8] {
+    self.data
+  }
 }
 
-impl fmt::Debug for FirmwareVolume {
+impl<'a> fmt::Debug for FirmwareVolume<'a> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("FirmwareVolume")
       .field("attributes", &self.attributes)
@@ -399,22 +411,22 @@ impl fmt::Debug for FirmwareVolume {
 /// # }
 ///```
 #[derive(Clone)]
-pub struct File {
+pub struct File<'a> {
+  data: &'a [u8],
   name: efi::Guid,
   file_type: u8,
   attributes: u8,
   header_size: usize,
   size: u64,
-  data: Box<[u8]>,
   sections: Vec<Section>,
 }
 
-impl File {
+impl<'a> File<'a> {
   /// Instantiates a new File by parsing the given buffer. Encapsulation sections will not be expanded.
   ///
   /// The normal way to obtain a File instance would be through the [`FirmwareVolume::files()`] method, but
   /// a constructor is provided here to enable independent instantiation of a file.
-  pub fn new(buffer: &[u8]) -> Result<Self, efi::Status> {
+  pub fn new(buffer: &'a [u8]) -> Result<Self, efi::Status> {
     // verify that buffer has enough storage for a file header.
     if buffer.len() < mem::size_of::<file::Header>() {
       Err(efi::Status::INVALID_PARAMETER)?;
@@ -489,12 +501,12 @@ impl File {
     }
 
     Ok(Self {
+      data: &buffer[..size as usize],
       name: file_header.name,
       file_type: file_header.file_type,
       attributes: file_header.attributes,
       header_size,
       size,
-      data: Box::from(buffer),
       sections: Vec::new(),
     })
   }
@@ -575,8 +587,13 @@ impl File {
   }
 
   /// Returns the raw data from the file (without extracting any sections), not including the header.
-  pub fn data(&self) -> &[u8] {
+  pub fn content(&self) -> &[u8] {
     &self.data[self.header_size..self.size as usize]
+  }
+
+  /// Returns the raw data for the file, including the header.
+  pub fn data(&self) -> &[u8] {
+    self.data
   }
 
   /// Enumerates the sections within the file (without extracting encapsulation sections
@@ -596,7 +613,7 @@ impl File {
   }
 }
 
-impl fmt::Debug for File {
+impl<'a> fmt::Debug for File<'a> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("File")
       .field("name", &self.name)
@@ -824,7 +841,7 @@ impl<'a> FvFileIterator<'a> {
 }
 
 impl<'a> Iterator for FvFileIterator<'a> {
-  type Item = Result<File, efi::Status>;
+  type Item = Result<File<'a>, efi::Status>;
 
   fn next(&mut self) -> Option<Self::Item> {
     if self.error {
@@ -1188,8 +1205,9 @@ mod unit_tests {
     let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
     let fv_bytes = fs::read(root.join("GIGANTOR.Fv"))?;
     let mut fv = FirmwareVolume::new(&fv_bytes).expect("Firmware Volume Corrupt");
-    for file in fv.enumerate_files().expect("file parse error").iter_mut() {
-      file.enumerate_sections_with_extractor(&ExampleSectionExtractor {}).expect("section parse error");
+    for file in fv.enumerate_files().expect("file parse error").iter() {
+      let _sections =
+        file.clone().enumerate_sections_with_extractor(&ExampleSectionExtractor {}).expect("section parse error");
     }
     println!("{:#x?}", fv);
     Ok(())
