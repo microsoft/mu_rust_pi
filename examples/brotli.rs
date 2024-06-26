@@ -97,11 +97,12 @@ impl<'a> Debug for PrettyMetaData<'a> {
   }
 }
 
-fn print_fv(mut fv: FirmwareVolume) {
+fn print_fv(fv: FirmwareVolume) {
   println!("FV: {:x?}", fv.fv_name().map(|x| uuid::Uuid::from_bytes(*x.as_bytes())));
   println!("  BlockMap: {:x?}", fv.block_map());
   println!("  Files: ");
-  for (file_idx, file) in fv.enumerate_all_with_extractor(&BrotliSectionExtractor {}).unwrap().iter().enumerate() {
+  let files = fv.enumerate_files().unwrap();
+  for (file_idx, file) in files.iter().enumerate() {
     println!(
       "    ({:?}, name: {:x?}, type: {:?}, size: {:x?})",
       file_idx,
@@ -110,7 +111,8 @@ fn print_fv(mut fv: FirmwareVolume) {
       file.size()
     );
     println!("    Sections:");
-    for (section_idx, section) in file.sections().iter().enumerate() {
+    let sections = file.enumerate_sections_with_extractor(&BrotliSectionExtractor {}).unwrap();
+    for (section_idx, section) in sections.iter().enumerate() {
       println!(
         "      ({:?}, type: {:?}, metadata: {:x?}",
         section_idx,
