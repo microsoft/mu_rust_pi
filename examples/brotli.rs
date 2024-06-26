@@ -97,11 +97,11 @@ impl<'a> Debug for PrettyMetaData<'a> {
   }
 }
 
-fn print_fv(fv: FirmwareVolume) {
+fn print_fv(mut fv: FirmwareVolume) {
   println!("FV: {:x?}", fv.fv_name().map(|x| uuid::Uuid::from_bytes(*x.as_bytes())));
   println!("  BlockMap: {:x?}", fv.block_map());
   println!("  Files: ");
-  for (file_idx, file) in fv.files().iter().enumerate() {
+  for (file_idx, file) in fv.enumerate_files().unwrap().iter_mut().enumerate() {
     println!(
       "    ({:?}, name: {:x?}, type: {:?}, size: {:x?})",
       file_idx,
@@ -110,7 +110,9 @@ fn print_fv(fv: FirmwareVolume) {
       file.size()
     );
     println!("    Sections:");
-    for (section_idx, section) in file.sections().iter().enumerate() {
+    for (section_idx, section) in
+      file.enumerate_sections_with_extractor(&BrotliSectionExtractor {}).unwrap().iter().enumerate()
+    {
       println!(
         "      ({:?}, type: {:?}, metadata: {:x?}",
         section_idx,
@@ -125,7 +127,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   let root = Path::new(&env::var("CARGO_MANIFEST_DIR")?).join("test_resources");
 
   let fv_bytes = fs::read(root.join("FVMAIN_COMPACT.Fv"))?;
-  let fv = FirmwareVolume::new_with_extractor(&fv_bytes, &BrotliSectionExtractor {}).unwrap();
+  let fv = FirmwareVolume::new(&fv_bytes).unwrap();
 
   print_fv(fv);
 
