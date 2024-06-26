@@ -359,6 +359,11 @@ impl FirmwareVolume {
   pub fn attributes(&self) -> EfiFvbAttributes2 {
     self.attributes
   }
+
+  /// Returns the size in bytes of the FV data + header.
+  pub fn size(&self) -> u64 {
+    self.data.len() as u64
+  }
 }
 
 impl fmt::Debug for FirmwareVolume {
