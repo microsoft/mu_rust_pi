@@ -142,7 +142,7 @@ pub struct FirmwareVolume<'a> {
 impl<'a> FirmwareVolume<'a> {
   /// Instantiate a new FirmwareVolume.
   ///
-  /// Contents of the FirmwareVolume will be cached in this instance, encapsulation sections will not be unpacked.
+  /// Contents of the FirmwareVolume will be cached in this instance.
   pub fn new(buffer: &'a [u8]) -> Result<Self, efi::Status> {
     //buffer must be large enough to hold the header structure.
     if buffer.len() < mem::size_of::<fv::Header>() {
@@ -284,7 +284,7 @@ impl<'a> FirmwareVolume<'a> {
   /// ## Safety
   /// Caller must ensure that base_address is the address of the start of a firmware volume.
   ///
-  /// Contents of the FirmwareVolume will be cached in this instance, encapsulation sections will not be unpacked.
+  /// Contents of the FirmwareVolume will be cached in this instance.
   pub unsafe fn new_from_address(base_address: u64) -> Result<Self, efi::Status> {
     let fv_header = &*(base_address as *const fv::Header);
     let fv_buffer = slice::from_raw_parts(base_address as *const u8, fv_header.fv_length as usize);
@@ -557,7 +557,7 @@ impl<'a> File<'a> {
     self.data
   }
 
-  /// Enumerates the sections within the file (without extracting encapsulation sections
+  /// Enumerates the sections within the file (without extracting encapsulation sections).
   pub fn enumerate_sections(&self) -> Result<Vec<Section>, efi::Status> {
     self.enumerate_sections_with_extractor(&NullSectionExtractor {})
   }
