@@ -313,6 +313,23 @@ impl FirmwareVolume {
     Ok(&mut self.files)
   }
 
+  /// Enumerates the files and sections in the FirmwareVolume. Encapsulation sections will not be extracted.
+  pub fn enumerate_all(&mut self) -> Result<&mut Vec<File>, efi::Status> {
+    self.enumerate_all_with_extractor(&NullSectionExtractor {})
+  }
+
+  /// Enumerates the files and sections in the FirmwareVolume, using the specified section extractor.
+  pub fn enumerate_all_with_extractor(
+    &mut self,
+    extractor: &dyn SectionExtractor,
+  ) -> Result<&mut Vec<File>, efi::Status> {
+    self.enumerate_files()?;
+    for file in self.files.iter_mut() {
+      file.enumerate_sections_with_extractor(extractor)?;
+    }
+    Ok(&mut self.files)
+  }
+
   /// returns the (linear block offset from FV base, block_size, remaining_blocks) given an LBA.
   pub fn lba_info(&self, lba: u32) -> Result<(u32, u32, u32), efi::Status> {
     let block_map = self.block_map();
@@ -941,14 +958,14 @@ mod unit_tests {
     extractor: &dyn SectionExtractor,
   ) -> Result<(), Box<dyn Error>> {
     let mut count = 0;
-    for ffs_file in fv.enumerate_files().unwrap() {
+    for ffs_file in fv.enumerate_all_with_extractor(extractor).unwrap() {
       count += 1;
       let file_name = Uuid::from_bytes_le(*ffs_file.name().as_bytes()).to_string().to_uppercase();
       if let Some(mut target) = expected_values.files_to_test.remove(&file_name) {
         assert_eq!(target.file_type, ffs_file.file_type_raw(), "[{file_name}] Error with the file type.");
         assert_eq!(target.attributes, ffs_file.attributes_raw(), "[{file_name}] Error with the file attributes.");
         assert_eq!(target.size, ffs_file.size(), "[{file_name}] Error with the file size (Full size).");
-        for section in ffs_file.enumerate_sections_with_extractor(extractor).iter().enumerate() {
+        for section in ffs_file.sections().iter().enumerate() {
           println!("{:x?}", section);
         }
         assert_eq!(
