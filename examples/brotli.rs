@@ -97,12 +97,12 @@ impl<'a> Debug for PrettyMetaData<'a> {
   }
 }
 
-fn print_fv(fv: FirmwareVolume) {
+fn print_fv(fv: FirmwareVolume) -> Result<(), efi::Status> {
   println!("FV: {:x?}", fv.fv_name().map(|x| uuid::Uuid::from_bytes(*x.as_bytes())));
   println!("  BlockMap: {:x?}", fv.block_map());
   println!("  Files: ");
-  let files = fv.enumerate_files().unwrap();
-  for (file_idx, file) in files.iter().enumerate() {
+  for (file_idx, file) in fv.file_iter().enumerate() {
+    let file = file?;
     println!(
       "    ({:?}, name: {:x?}, type: {:?}, size: {:x?})",
       file_idx,
@@ -111,8 +111,8 @@ fn print_fv(fv: FirmwareVolume) {
       file.size()
     );
     println!("    Sections:");
-    let sections = file.enumerate_sections_with_extractor(&BrotliSectionExtractor {}).unwrap();
-    for (section_idx, section) in sections.iter().enumerate() {
+    for (section_idx, section) in file.section_iter_with_extractor(&BrotliSectionExtractor {}).enumerate() {
+      let section = section?;
       println!(
         "      ({:?}, type: {:?}, metadata: {:x?}",
         section_idx,
@@ -121,6 +121,7 @@ fn print_fv(fv: FirmwareVolume) {
       );
     }
   }
+  Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -129,7 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   let fv_bytes = fs::read(root.join("FVMAIN_COMPACT.Fv"))?;
   let fv = FirmwareVolume::new(&fv_bytes).unwrap();
 
-  print_fv(fv);
+  print_fv(fv).unwrap();
 
   Ok(())
 }
