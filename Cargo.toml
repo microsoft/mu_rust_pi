@@ -13,7 +13,7 @@ categories = ["embedded", "hardware-support", "no-std"]
 [dependencies]
 indoc = "2.0"
 num-traits = { version = "0.2", default-features = false }
-r-efi = { version = "4.4.0", default_features = false }
+r-efi = { version = "5.0.0", default_features = false }
 uuid = { version = "1.8", default_features = false }
 
 [dev-dependencies]
