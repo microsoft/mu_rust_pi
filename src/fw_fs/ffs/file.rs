@@ -106,6 +106,7 @@ pub(crate) struct Header {
 // EFI_FFS_FILE_HEADER
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(crate) struct Header2 {
     pub(crate) header: Header,
     pub(crate) extended_size: u64,
