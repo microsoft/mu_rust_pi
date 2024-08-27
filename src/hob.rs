@@ -73,6 +73,7 @@ use core::{
     fmt,
     marker::PhantomData,
     mem::{self, size_of},
+    slice,
 };
 use indoc::indoc;
 
@@ -620,7 +621,7 @@ pub enum Hob<'a> {
     MemoryAllocationModule(&'a MemoryAllocationModule),
     Capsule(&'a Capsule),
     ResourceDescriptor(&'a ResourceDescriptor),
-    GuidHob(&'a GuidHob),
+    GuidHob(&'a GuidHob, &'a [u8]),
     FirmwareVolume(&'a FirmwareVolume),
     FirmwareVolume2(&'a FirmwareVolume2),
     FirmwareVolume3(&'a FirmwareVolume3),
@@ -643,7 +644,7 @@ impl HobTrait for Hob<'_> {
             Hob::MemoryAllocationModule(_) => size_of::<MemoryAllocationModule>(),
             Hob::Capsule(_) => size_of::<Capsule>(),
             Hob::ResourceDescriptor(_) => size_of::<ResourceDescriptor>(),
-            Hob::GuidHob(_) => size_of::<GuidHob>(),
+            Hob::GuidHob(hob, _) => hob.header.length as usize,
             Hob::FirmwareVolume(_) => size_of::<FirmwareVolume>(),
             Hob::FirmwareVolume2(_) => size_of::<FirmwareVolume2>(),
             Hob::FirmwareVolume3(_) => size_of::<FirmwareVolume3>(),
@@ -660,7 +661,7 @@ impl HobTrait for Hob<'_> {
             Hob::MemoryAllocationModule(hob) => *hob as *const MemoryAllocationModule as *const _,
             Hob::Capsule(hob) => *hob as *const Capsule as *const _,
             Hob::ResourceDescriptor(hob) => *hob as *const ResourceDescriptor as *const _,
-            Hob::GuidHob(hob) => *hob as *const GuidHob as *const _,
+            Hob::GuidHob(hob, _) => *hob as *const GuidHob as *const _,
             Hob::FirmwareVolume(hob) => *hob as *const FirmwareVolume as *const _,
             Hob::FirmwareVolume2(hob) => *hob as *const FirmwareVolume2 as *const _,
             Hob::FirmwareVolume3(hob) => *hob as *const FirmwareVolume3 as *const _,
@@ -854,8 +855,13 @@ impl<'a> HobList<'a> {
                     self.0.push(Hob::ResourceDescriptor(resource_desc_hob));
                 }
                 GUID_EXTENSION => {
-                    let guid_hob = unsafe { hob_header.cast::<GuidHob>().as_ref().expect(NOT_NULL) };
-                    self.0.push(Hob::GuidHob(guid_hob));
+                    let (guid_hob, data) = unsafe {
+                        let hob = hob_header.cast::<GuidHob>().as_ref().expect(NOT_NULL);
+                        let data_ptr = hob_header.byte_add(mem::size_of::<GuidHob>()) as *mut u8;
+                        let data_len = hob.header.length as usize - mem::size_of::<GuidHob>();
+                        (hob, slice::from_raw_parts(data_ptr, data_len))
+                    };
+                    self.0.push(Hob::GuidHob(guid_hob, data));
                 }
                 FV => {
                     assert_hob_size::<FirmwareVolume>(current_header);
@@ -971,7 +977,7 @@ impl fmt::Debug for HobList<'_> {
                         hob.resource_length
                     )?;
                 }
-                Hob::GuidHob(hob) => {
+                Hob::GuidHob(hob, _data) => {
                     write!(
                         f,
                         indoc! {"
@@ -1035,7 +1041,7 @@ impl Hob<'_> {
             Hob::MemoryAllocationModule(hob) => hob.header,
             Hob::Capsule(hob) => hob.header,
             Hob::ResourceDescriptor(hob) => hob.header,
-            Hob::GuidHob(hob) => hob.header,
+            Hob::GuidHob(hob, _) => hob.header,
             Hob::FirmwareVolume(hob) => hob.header,
             Hob::FirmwareVolume2(hob) => hob.header,
             Hob::FirmwareVolume3(hob) => hob.header,
@@ -1086,7 +1092,12 @@ impl<'a> Iterator for HobIter<'a> {
                 RESOURCE_DESCRIPTOR => {
                     Hob::ResourceDescriptor((self.hob_ptr as *const ResourceDescriptor).as_ref().expect(NOT_NULL))
                 }
-                GUID_EXTENSION => Hob::GuidHob((self.hob_ptr as *const GuidHob).as_ref().expect(NOT_NULL)),
+                GUID_EXTENSION => {
+                    let hob = (self.hob_ptr as *const GuidHob).as_ref().expect(NOT_NULL);
+                    let data_ptr = self.hob_ptr.byte_add(mem::size_of::<GuidHob>()) as *const u8;
+                    let data_len = hob.header.length as usize - mem::size_of::<GuidHob>();
+                    Hob::GuidHob(hob, slice::from_raw_parts(data_ptr, data_len))
+                }
                 FV => Hob::FirmwareVolume((self.hob_ptr as *const FirmwareVolume).as_ref().expect(NOT_NULL)),
                 FV2 => Hob::FirmwareVolume2((self.hob_ptr as *const FirmwareVolume2).as_ref().expect(NOT_NULL)),
                 FV3 => Hob::FirmwareVolume3((self.hob_ptr as *const FirmwareVolume3).as_ref().expect(NOT_NULL)),
@@ -1362,7 +1373,7 @@ mod tests {
         hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
         hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
         hoblist.push(Hob::Capsule(&capsule));
-        hoblist.push(Hob::GuidHob(&guid_hob));
+        hoblist.push(Hob::GuidHob(&guid_hob, &[0u8; 0]));
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Handoff(&end_of_hob_list));
@@ -1382,8 +1393,9 @@ mod tests {
                 Hob::Capsule(capsule) => {
                     assert_eq!(capsule.base_address, 0);
                 }
-                Hob::GuidHob(guid_hob) => {
+                Hob::GuidHob(guid_hob, data) => {
                     assert_eq!(guid_hob.name, r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]));
+                    assert_eq!(*data, [0u8; 0]);
                 }
                 Hob::FirmwareVolume(firmware_volume) => {
                     assert_eq!(firmware_volume.length, 0x0123456789abcdef);
@@ -1431,7 +1443,7 @@ mod tests {
         hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
         hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
         hoblist.push(Hob::Capsule(&capsule));
-        hoblist.push(Hob::GuidHob(&guid_hob));
+        hoblist.push(Hob::GuidHob(&guid_hob, &[0u8; 0]));
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Cpu(&cpu));
@@ -1454,8 +1466,9 @@ mod tests {
                 Hob::Capsule(capsule) => {
                     assert_eq!(capsule.base_address, 0);
                 }
-                Hob::GuidHob(guid_hob) => {
+                Hob::GuidHob(guid_hob, data) => {
                     assert_eq!(guid_hob.name, r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]));
+                    assert_eq!(*data, [0u8; 0]);
                 }
                 Hob::FirmwareVolume(firmware_volume) => {
                     assert_eq!(firmware_volume.length, 0x0123456789abcdef);
@@ -1506,8 +1519,9 @@ mod tests {
                 Hob::Capsule(capsule) => {
                     assert_eq!(capsule.base_address, 0);
                 }
-                Hob::GuidHob(guid_hob) => {
+                Hob::GuidHob(guid_hob, data) => {
                     assert_eq!(guid_hob.name, r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]));
+                    assert_eq!(*data, [0u8; 0]);
                 }
                 Hob::FirmwareVolume(firmware_volume) => {
                     assert_eq!(firmware_volume.length, 0x0123456789abcdef);
@@ -1562,7 +1576,7 @@ mod tests {
         hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
         hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
         hoblist.push(Hob::Capsule(&capsule));
-        hoblist.push(Hob::GuidHob(&guid_hob));
+        hoblist.push(Hob::GuidHob(&guid_hob, &[0u8; 0]));
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Cpu(&cpu));
