@@ -1112,6 +1112,20 @@ impl<'a> Iterator for HobIter<'a> {
     }
 }
 
+// Well-known GUID Extension HOB type definitions
+
+/// Memory Type Information GUID Extension Hob GUID.
+pub const MEMORY_TYPE_INFO_HOB_GUID: r_efi::efi::Guid =
+    r_efi::efi::Guid::from_fields(0x4c19049f, 0x4137, 0x4dd3, 0x9c, 0x10, &[0x8b, 0x97, 0xa8, 0x3f, 0xfd, 0xfa]);
+
+/// Memory Type Information GUID Extension Hob structure definition.
+#[derive(Debug)]
+#[repr(C)]
+pub struct EFiMemoryTypeInformation {
+    pub memory_type: r_efi::efi::MemoryType,
+    pub number_of_pages: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
