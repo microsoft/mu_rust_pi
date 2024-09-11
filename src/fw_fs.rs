@@ -679,7 +679,7 @@ impl Section {
                 (SectionMetaData::Compression(*compression_header), data)
             }
             FfsSectionRawType::encapsulated::GUID_DEFINED => {
-                let guid_defined_header_size = mem::size_of::<section::header::Compression>();
+                let guid_defined_header_size = mem::size_of::<section::header::GuidDefined>();
                 //verify that buffer has enough storage for a guid_defined header.
                 if buffer.len() < content_offset + guid_defined_header_size {
                     Err(efi::Status::VOLUME_CORRUPTED)?;
