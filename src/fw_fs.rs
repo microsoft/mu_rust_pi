@@ -1207,4 +1207,80 @@ mod unit_tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn section_should_have_correct_metadata() -> Result<(), Box<dyn Error>> {
+        let empty_pe32: [u8; 4] = [0x04, 0x00, 0x00, 0x10];
+        let section = Section::new(&empty_pe32).unwrap();
+        assert!(matches!(section.meta_data(), SectionMetaData::None));
+
+        let empty_compression: [u8; 0x11] =
+            [0x11, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let section = Section::new(&empty_compression).unwrap();
+        match section.meta_data() {
+            SectionMetaData::Compression(header) => {
+                let length = header.uncompressed_length;
+                assert_eq!(length, 0);
+                assert_eq!(header.compression_type, 1);
+            }
+            otherwise_bad => panic!("invalid section: {:x?}", otherwise_bad),
+        }
+
+        let empty_guid_defined: [u8; 32] = [
+            0x20, 0x00, 0x00, 0x02, //Header
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, //GUID
+            0x1C, 0x00, //Data offset
+            0x12, 0x34, //Attributes
+            0x00, 0x01, 0x02, 0x03, //GUID-specific fields
+            0x04, 0x15, 0x19, 0x80, //Data
+        ];
+        let section = Section::new(&empty_guid_defined).unwrap();
+        match section.meta_data() {
+            SectionMetaData::GuidDefined(header, guid_data) => {
+                assert_eq!(
+                    header.section_definition_guid,
+                    efi::Guid::from_bytes(&[
+                        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF
+                    ])
+                );
+                assert_eq!(header.data_offset, 0x1C);
+                assert_eq!(header.attributes, 0x3412);
+                assert_eq!(guid_data.to_vec(), &[0x00u8, 0x01, 0x02, 0x03]);
+                assert_eq!(section.section_data(), &[0x04, 0x15, 0x19, 0x80]);
+            }
+            otherwise_bad => panic!("invalid section: {:x?}", otherwise_bad),
+        }
+
+        let empty_version: [u8; 14] =
+            [0x0E, 0x00, 0x00, 0x14, 0x00, 0x00, 0x31, 0x00, 0x2E, 0x00, 0x30, 0x00, 0x00, 0x00];
+        let section = Section::new(&empty_version).unwrap();
+        match section.meta_data() {
+            SectionMetaData::Version(version) => {
+                assert_eq!(version.build_number, 0);
+                assert_eq!(section.section_data(), &[0x31, 0x00, 0x2E, 0x00, 0x30, 0x00, 0x00, 0x00]);
+            }
+            otherwise_bad => panic!("invalid section: {:x?}", otherwise_bad),
+        }
+
+        let empty_freeform_subtype: [u8; 024] = [
+            0x18, 0x00, 0x00, 0x18, //Header
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, //GUID
+            0x04, 0x15, 0x19, 0x80, //Data
+        ];
+        let section = Section::new(&empty_freeform_subtype).unwrap();
+        match section.meta_data() {
+            SectionMetaData::FreeformSubtypeGuid(ffst_header) => {
+                assert_eq!(
+                    ffst_header.sub_type_guid,
+                    efi::Guid::from_bytes(&[
+                        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF
+                    ])
+                );
+                assert_eq!(section.section_data(), &[0x04, 0x15, 0x19, 0x80]);
+            }
+            otherwise_bad => panic!("invalid section: {:x?}", otherwise_bad),
+        }
+
+        Ok(())
+    }
 }
