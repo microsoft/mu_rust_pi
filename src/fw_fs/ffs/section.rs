@@ -101,6 +101,8 @@ pub mod header {
         pub uncompressed_length: u32,
         pub compression_type: u8,
     }
+    pub const NOT_COMPRESSED: u8 = 0x00;
+    pub const STANDARD_COMPRESSION: u8 = 0x01;
 
     /// EFI_GUID_DEFINED_SECTION per PI spec 1.8A 3.2.5.7
     #[repr(C)]
