@@ -36,3 +36,4 @@ pub mod fw_fs;
 pub mod hob;
 pub mod list_entry;
 pub mod protocols;
+pub mod status_code;
