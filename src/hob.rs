@@ -37,7 +37,7 @@
 //!   hob::PhaseHandoffInformationTable {
 //!     header,
 //!     version: 0x00010000,
-//!     boot_mode: 0,
+//!     boot_mode: BootMode::BootWithFullConfiguration,
 //!     memory_top: 0xdeadbeef,
 //!     memory_bottom: 0xdeadc0de,
 //!     free_memory_top: 104,
@@ -67,7 +67,10 @@
 //! SPDX-License-Identifier: BSD-2-Clause-Patent
 //!
 
-use crate::address_helper::{align_down, align_up};
+use crate::{
+    address_helper::{align_down, align_up},
+    BootMode,
+};
 use core::{
     ffi::c_void,
     fmt,
@@ -96,9 +99,6 @@ pub type EfiPhysicalAddress = u32;
 // if the target is not x86, x86_64, or aarch64, then alert the user
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
 compile_error!("This crate only (currently) supports x86, x86_64, and aarch64 architectures");
-
-// All targets assume (currently) that EfiBootMode is u32
-pub type EfiBootMode = u32;
 
 // HOB type field is a UINT16
 pub const HANDOFF: u16 = 0x0001;
@@ -201,7 +201,7 @@ pub struct PhaseHandoffInformationTable {
 
     /// The system boot mode as determined during the HOB producer phase.
     ///
-    pub boot_mode: EfiBootMode,
+    pub boot_mode: BootMode,
 
     /// The highest address location of memory that is allocated for use by the HOB producer
     /// phase. This address must be 4-KB aligned to meet page restrictions of UEFI.
@@ -929,7 +929,7 @@ impl fmt::Debug for HobList<'_> {
                         PHASE HANDOFF INFORMATION TABLE (PHIT) HOB
                           HOB Length: 0x{:x}
                           Version: 0x{:x}
-                          Boot Mode: 0x{:x}
+                          Boot Mode: {}
                           Memory Bottom: 0x{:x}
                           Memory Top: 0x{:x}
                           Free Memory Bottom: 0x{:x}
@@ -1131,6 +1131,7 @@ mod tests {
     use crate::{
         hob,
         hob::{Hob, HobList, HobTrait},
+        BootMode,
     };
 
     use core::{
@@ -1274,7 +1275,7 @@ mod tests {
         hob::PhaseHandoffInformationTable {
             header,
             version: 0x00010000,
-            boot_mode: 0,
+            boot_mode: BootMode::BootWithFullConfiguration,
             memory_top: 0xdeadbeef,
             memory_bottom: 0xdeadc0de,
             free_memory_top: 104,
@@ -1296,7 +1297,7 @@ mod tests {
         hob::PhaseHandoffInformationTable {
             header,
             version: 0x00010000,
-            boot_mode: 0,
+            boot_mode: BootMode::BootWithFullConfiguration,
             memory_top: 0xdeadbeef,
             memory_bottom: 0xdeadc0de,
             free_memory_top: 104,

@@ -31,9 +31,13 @@
 #![cfg_attr(feature = "nightly", feature(coverage_attribute))]
 
 mod address_helper;
+mod boot_mode;
+
 pub mod dxe_services;
 pub mod fw_fs;
 pub mod hob;
 pub mod list_entry;
 pub mod protocols;
 pub mod status_code;
+
+pub use boot_mode::Mode as BootMode;
