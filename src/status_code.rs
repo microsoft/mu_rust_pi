@@ -81,7 +81,7 @@ pub const EFI_SOFTWARE:        EfiStatusCodeValue = 0x03000000;
 /// Values of 8-127 are reserved for future use by this specification.
 /// Values of 128-255 are reserved for OEM use.
 ///
-pub const EFI_COMPUTING_UNIT_UNSPECIFIED:         EfiStatusCodeValue = EFI_COMPUTING_UNIT | 0x00000000;
+pub const EFI_COMPUTING_UNIT_UNSPECIFIED:         EfiStatusCodeValue = EFI_COMPUTING_UNIT;
 pub const EFI_COMPUTING_UNIT_HOST_PROCESSOR:      EfiStatusCodeValue = EFI_COMPUTING_UNIT | 0x00010000;
 pub const EFI_COMPUTING_UNIT_FIRMWARE_PROCESSOR:  EfiStatusCodeValue = EFI_COMPUTING_UNIT | 0x00020000;
 pub const EFI_COMPUTING_UNIT_IO_PROCESSOR:        EfiStatusCodeValue = EFI_COMPUTING_UNIT | 0x00030000;
@@ -100,7 +100,7 @@ pub const EFI_CU_PC_INIT_END:    EfiStatusCodeValue = 0x00000001;
 
 /// Computing Unit Host Processor Subclass Progress Code definitions.
 ///
-pub const EFI_CU_HP_PC_POWER_ON_INIT:           EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_CU_HP_PC_POWER_ON_INIT:           EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_CU_HP_PC_CACHE_INIT:              EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_CU_HP_PC_RAM_INIT:                EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_CU_HP_PC_MEMORY_CONTROLLER_INIT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -118,12 +118,12 @@ pub const EFI_CU_HP_PC_SMM_INIT:                EfiStatusCodeValue = EFI_SUBCLAS
 
 /// Computing Unit Cache Subclass Progress Code definitions.
 ///
-pub const EFI_CU_CACHE_PC_PRESENCE_DETECT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_CU_CACHE_PC_PRESENCE_DETECT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_CU_CACHE_PC_CONFIGURATION:    EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 
 /// Computing Unit Memory Subclass Progress Code definitions.
 ///
-pub const EFI_CU_MEMORY_PC_SPD_READ:         EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_CU_MEMORY_PC_SPD_READ:         EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_CU_MEMORY_PC_PRESENCE_DETECT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_CU_MEMORY_PC_TIMING:           EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_CU_MEMORY_PC_CONFIGURING:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -136,7 +136,7 @@ pub const EFI_CU_MEMORY_PC_TEST:             EfiStatusCodeValue = EFI_SUBCLASS_S
 
 /// South Bridge initialization prior to memory detection.
 ///
-pub const EFI_CHIPSET_PC_PEI_CAR_SB_INIT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC|0x00000000;
+pub const EFI_CHIPSET_PC_PEI_CAR_SB_INIT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 
 /// North Bridge initialization prior to memory detection.
 ///
@@ -192,7 +192,7 @@ pub const EFI_CU_EC_NOT_CONFIGURED:  EfiStatusCodeValue = 0x00000004;
 
 /// Computing Unit Host Processor Subclass Error Code definitions.
 ///
-pub const EFI_CU_HP_EC_INVALID_TYPE:         EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_CU_HP_EC_INVALID_TYPE:         EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_CU_HP_EC_INVALID_SPEED:        EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_CU_HP_EC_MISMATCH:             EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_CU_HP_EC_TIMER_EXPIRED:        EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -209,7 +209,7 @@ pub const EFI_CU_HP_EC_NO_MICROCODE_UPDATE:  EfiStatusCodeValue = EFI_SUBCLASS_S
 
 /// Computing Unit Firmware Processor Subclass Error Code definitions.
 ///
-pub const EFI_CU_FP_EC_HARD_FAIL:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_CU_FP_EC_HARD_FAIL:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_CU_FP_EC_SOFT_FAIL:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_CU_FP_EC_COMM_ERROR:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 
@@ -218,14 +218,14 @@ pub const EFI_CU_FP_EC_COMM_ERROR:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC |
 
 /// Computing Unit Cache Subclass Error Code definitions.
 ///
-pub const EFI_CU_CACHE_EC_INVALID_TYPE:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_CU_CACHE_EC_INVALID_TYPE:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_CU_CACHE_EC_INVALID_SPEED:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_CU_CACHE_EC_INVALID_SIZE:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_CU_CACHE_EC_MISMATCH:       EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
 
 /// Computing Unit Memory Subclass Error Code definitions.
 ///
-pub const EFI_CU_MEMORY_EC_INVALID_TYPE:    EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_CU_MEMORY_EC_INVALID_TYPE:    EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_CU_MEMORY_EC_INVALID_SPEED:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_CU_MEMORY_EC_CORRECTABLE:     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_CU_MEMORY_EC_UNCORRECTABLE:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -239,7 +239,7 @@ pub const EFI_CU_MEMORY_EC_NONE_USEFUL:     EfiStatusCodeValue = EFI_SUBCLASS_SP
 
 /// Computing Unit Chipset Subclass Error Code definitions.
 ///
-pub const EFI_CHIPSET_EC_BAD_BATTERY:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_CHIPSET_EC_BAD_BATTERY:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_CHIPSET_EC_DXE_NB_ERROR:     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_CHIPSET_EC_DXE_SB_ERROR:     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_CHIPSET_EC_INTRUDER_DETECT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -248,7 +248,7 @@ pub const EFI_CHIPSET_EC_INTRUDER_DETECT:  EfiStatusCodeValue = EFI_SUBCLASS_SPE
 /// Values of 12-127 are reserved for future use by this specification.
 /// Values of 128-255 are reserved for OEM use.
 ///
-pub const EFI_PERIPHERAL_UNSPECIFIED:      EfiStatusCodeValue = EFI_PERIPHERAL | 0x00000000;
+pub const EFI_PERIPHERAL_UNSPECIFIED:      EfiStatusCodeValue = EFI_PERIPHERAL;
 pub const EFI_PERIPHERAL_KEYBOARD:         EfiStatusCodeValue = EFI_PERIPHERAL | 0x00010000;
 pub const EFI_PERIPHERAL_MOUSE:            EfiStatusCodeValue = EFI_PERIPHERAL | 0x00020000;
 pub const EFI_PERIPHERAL_LOCAL_CONSOLE:    EfiStatusCodeValue = EFI_PERIPHERAL | 0x00030000;
@@ -281,12 +281,12 @@ pub const EFI_P_PC_REMOVED:          EfiStatusCodeValue = 0x00000007;
 
 /// Peripheral Class Keyboard Subclass Progress Code definitions.
 ///
-pub const EFI_P_KEYBOARD_PC_CLEAR_BUFFER:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_P_KEYBOARD_PC_CLEAR_BUFFER:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_P_KEYBOARD_PC_SELF_TEST:     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 
 /// Peripheral Class Mouse Subclass Progress Code definitions.
 ///
-pub const EFI_P_MOUSE_PC_SELF_TEST:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_P_MOUSE_PC_SELF_TEST:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 
 /// Peripheral Class Local Console Subclass Progress Code definitions.
 ///
@@ -296,7 +296,7 @@ pub const EFI_P_MOUSE_PC_SELF_TEST:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC 
 
 /// Peripheral Class Serial Port Subclass Progress Code definitions.
 ///
-pub const EFI_P_SERIAL_PORT_PC_CLEAR_BUFFER:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_P_SERIAL_PORT_PC_CLEAR_BUFFER:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 
 /// Peripheral Class Parallel Port Subclass Progress Code definitions.
 ///
@@ -338,13 +338,13 @@ pub const EFI_P_EC_RESOURCE_CONFLICT:  EfiStatusCodeValue = 0x00000009;
 
 /// Peripheral Class Keyboard Subclass Error Code definitions.
 ///
-pub const EFI_P_KEYBOARD_EC_LOCKED:       EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_P_KEYBOARD_EC_LOCKED:       EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_P_KEYBOARD_EC_STUCK_KEY:    EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_P_KEYBOARD_EC_BUFFER_FULL:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 
 /// Peripheral Class Mouse Subclass Error Code definitions.
 ///
-pub const EFI_P_MOUSE_EC_LOCKED:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_P_MOUSE_EC_LOCKED:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 
 /// Peripheral Class Local Console Subclass Error Code definitions.
 ///
@@ -380,7 +380,7 @@ pub const EFI_P_MOUSE_EC_LOCKED:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0
 /// Values of 14-127 are reserved for future use by this specification.
 /// Values of 128-255 are reserved for OEM use.
 ///
-pub const EFI_IO_BUS_UNSPECIFIED:  EfiStatusCodeValue = EFI_IO_BUS | 0x00000000;
+pub const EFI_IO_BUS_UNSPECIFIED:  EfiStatusCodeValue = EFI_IO_BUS;
 pub const EFI_IO_BUS_PCI:          EfiStatusCodeValue = EFI_IO_BUS | 0x00010000;
 pub const EFI_IO_BUS_USB:          EfiStatusCodeValue = EFI_IO_BUS | 0x00020000;
 pub const EFI_IO_BUS_IBA:          EfiStatusCodeValue = EFI_IO_BUS | 0x00030000;
@@ -410,7 +410,7 @@ pub const EFI_IOB_PC_HOTPLUG:   EfiStatusCodeValue = 0x00000006;
 
 /// IO Bus Class PCI Subclass Progress Code definitions.
 ///
-pub const EFI_IOB_PCI_BUS_ENUM:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_IOB_PCI_BUS_ENUM:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_IOB_PCI_RES_ALLOC:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_IOB_PCI_HPC_INIT:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 
@@ -434,7 +434,7 @@ pub const EFI_IOB_PCI_HPC_INIT:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0
 
 /// IO Bus Class ATA/ATAPI Subclass Progress Code definitions.
 ///
-pub const EFI_IOB_ATA_BUS_SMART_ENABLE:          EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_IOB_ATA_BUS_SMART_ENABLE:          EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_IOB_ATA_BUS_SMART_DISABLE:         EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_IOB_ATA_BUS_SMART_OVERTHRESHOLD:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_IOB_ATA_BUS_SMART_UNDERTHRESHOLD:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -469,7 +469,7 @@ pub const EFI_IOB_EC_RESOURCE_CONFLICT:  EfiStatusCodeValue = 0x00000009;
 
 /// IO Bus Class PCI Subclass Error Code definitions.
 ///
-pub const EFI_IOB_PCI_EC_PERR:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_IOB_PCI_EC_PERR:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_IOB_PCI_EC_SERR:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 
 /// IO Bus Class USB Subclass Error Code definitions.
@@ -492,7 +492,7 @@ pub const EFI_IOB_PCI_EC_SERR:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x0
 
 /// IO Bus Class ATA/ATAPI Subclass Error Code definitions.
 ///
-pub const EFI_IOB_ATA_BUS_SMART_NOTSUPPORTED:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_IOB_ATA_BUS_SMART_NOTSUPPORTED:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_IOB_ATA_BUS_SMART_DISABLED:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 
 /// IO Bus Class FC Subclass Error Code definitions.
@@ -511,7 +511,7 @@ pub const EFI_IOB_ATA_BUS_SMART_DISABLED:      EfiStatusCodeValue = EFI_SUBCLASS
 /// Values of 14-127 are reserved for future use by this specification.
 /// Values of 128-255 are reserved for OEM use.
 ///
-pub const EFI_SOFTWARE_UNSPECIFIED:          EfiStatusCodeValue = EFI_SOFTWARE | 0x00000000;
+pub const EFI_SOFTWARE_UNSPECIFIED:          EfiStatusCodeValue = EFI_SOFTWARE;
 pub const EFI_SOFTWARE_SEC:                  EfiStatusCodeValue = EFI_SOFTWARE | 0x00010000;
 pub const EFI_SOFTWARE_PEI_CORE:             EfiStatusCodeValue = EFI_SOFTWARE | 0x00020000;
 pub const EFI_SOFTWARE_PEI_MODULE:           EfiStatusCodeValue = EFI_SOFTWARE | 0x00030000;
@@ -551,18 +551,18 @@ pub const EFI_SW_PC_USER_SETUP:          EfiStatusCodeValue = 0x00000007;
 
 /// Software Class SEC Subclass Progress Code definitions.
 ///
-pub const EFI_SW_SEC_PC_ENTRY_POINT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_SEC_PC_ENTRY_POINT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_SEC_PC_HANDOFF_TO_NEXT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 
 /// Software Class PEI Core Subclass Progress Code definitions.
 ///
-pub const EFI_SW_PEI_CORE_PC_ENTRY_POINT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_PEI_CORE_PC_ENTRY_POINT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_PEI_CORE_PC_HANDOFF_TO_NEXT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_PEI_CORE_PC_RETURN_TO_LAST:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 
 /// Software Class PEI Module Subclass Progress Code definitions.
 ///
-pub const EFI_SW_PEI_PC_RECOVERY_BEGIN:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_PEI_PC_RECOVERY_BEGIN:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_PEI_PC_CAPSULE_LOAD:    EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_PEI_PC_CAPSULE_START:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_PEI_PC_RECOVERY_USER:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -573,7 +573,7 @@ pub const EFI_SW_PEI_PC_S3_STARTED:      EfiStatusCodeValue = EFI_SUBCLASS_SPECI
 
 /// Software Class DXE Core Subclass Progress Code definitions.
 ///
-pub const EFI_SW_DXE_CORE_PC_ENTRY_POINT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_DXE_CORE_PC_ENTRY_POINT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_DXE_CORE_PC_HANDOFF_TO_NEXT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_DXE_CORE_PC_RETURN_TO_LAST:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_DXE_CORE_PC_START_DRIVER:     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -581,7 +581,7 @@ pub const EFI_SW_DXE_CORE_PC_ARCH_READY:       EfiStatusCodeValue = EFI_SUBCLASS
 
 /// Software Class DXE BS Driver Subclass Progress Code definitions.
 ///
-pub const EFI_SW_DXE_BS_PC_LEGACY_OPROM_INIT:             EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_DXE_BS_PC_LEGACY_OPROM_INIT:             EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_DXE_BS_PC_READY_TO_BOOT_EVENT:           EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_DXE_BS_PC_LEGACY_BOOT_EVENT:             EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_DXE_BS_PC_EXIT_BOOT_SERVICES_EVENT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -604,7 +604,7 @@ pub const EFI_SW_DXE_BS_PC_BOOT_OPTION_COMPLETE:          EfiStatusCodeValue = E
 
 /// Software Class EFI RT Subclass Progress Code definitions.
 ///
-pub const EFI_SW_RT_PC_ENTRY_POINT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_RT_PC_ENTRY_POINT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_RT_PC_HANDOFF_TO_NEXT:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_RT_PC_RETURN_TO_LAST:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 
@@ -628,7 +628,7 @@ pub const EFI_SW_RT_PC_RETURN_TO_LAST:   EfiStatusCodeValue = EFI_SUBCLASS_SPECI
 
 /// Software Class PEI Services Subclass Progress Code definitions.
 ///
-pub const EFI_SW_PS_PC_INSTALL_PPI:              EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_PS_PC_INSTALL_PPI:              EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_PS_PC_REINSTALL_PPI:            EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_PS_PC_LOCATE_PPI:               EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_PS_PC_NOTIFY_PPI:               EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -652,7 +652,7 @@ pub const EFI_SW_PS_PC_FFS_REGISTER_FOR_SHADOW:  EfiStatusCodeValue = EFI_SUBCLA
 
 /// Software Class EFI Boot Services Subclass Progress Code definitions.
 ///
-pub const EFI_SW_BS_PC_RAISE_TPL:                      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_BS_PC_RAISE_TPL:                      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_BS_PC_RESTORE_TPL:                    EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_BS_PC_ALLOCATE_PAGES:                 EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_BS_PC_FREE_PAGES:                     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -698,7 +698,7 @@ pub const EFI_SW_BS_PC_CREATE_EVENT_EX:                EfiStatusCodeValue = EFI_
 
 /// Software Class EFI Runtime Services Subclass Progress Code definitions.
 ///
-pub const EFI_SW_RS_PC_GET_TIME:                       EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_RS_PC_GET_TIME:                       EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_RS_PC_SET_TIME:                       EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_RS_PC_GET_WAKEUP_TIME:                EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_RS_PC_SET_WAKEUP_TIME:                EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -715,7 +715,7 @@ pub const EFI_SW_RS_PC_QUERY_VARIABLE_INFO:            EfiStatusCodeValue = EFI_
 
 /// Software Class EFI DXE Services Subclass Progress Code definitions
 ///
-pub const EFI_SW_DS_PC_ADD_MEMORY_SPACE:             EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_DS_PC_ADD_MEMORY_SPACE:             EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_DS_PC_ALLOCATE_MEMORY_SPACE:        EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_DS_PC_FREE_MEMORY_SPACE:            EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_DS_PC_REMOVE_MEMORY_SPACE:          EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -768,13 +768,13 @@ pub const EFI_SW_EC_RELEASE_ASSERT:                  EfiStatusCodeValue = 0x0000
 
 /// Software Class PEI Core Subclass Error Code definitions.
 ///
-pub const EFI_SW_PEI_CORE_EC_DXE_CORRUPT:           EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_PEI_CORE_EC_DXE_CORRUPT:           EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_PEI_CORE_EC_DXEIPL_NOT_FOUND:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_PEI_CORE_EC_MEMORY_NOT_INSTALLED:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 
 /// Software Class PEI Module Subclass Error Code definitions.
 ///
-pub const EFI_SW_PEI_EC_NO_RECOVERY_CAPSULE:         EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_PEI_EC_NO_RECOVERY_CAPSULE:         EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_PEI_EC_INVALID_CAPSULE_DESCRIPTOR:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_PEI_EC_S3_RESUME_PPI_NOT_FOUND:     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_PEI_EC_S3_BOOT_SCRIPT_ERROR:        EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -787,12 +787,12 @@ pub const EFI_SW_PEI_EC_INVALID_CAPSULE:             EfiStatusCodeValue = EFI_SU
 
 /// Software Class DXE Foundation Subclass Error Code definitions.
 ///
-pub const EFI_SW_DXE_CORE_EC_NO_ARCH:             EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_DXE_CORE_EC_NO_ARCH:             EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_DXE_CORE_EC_IMAGE_LOAD_FAILURE:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;    // MU_CHANGE
 
 /// Software Class DXE Boot Service Driver Subclass Error Code definitions.
 ///
-pub const EFI_SW_DXE_BS_EC_LEGACY_OPROM_NO_SPACE:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_DXE_BS_EC_LEGACY_OPROM_NO_SPACE:   EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_DXE_BS_EC_INVALID_PASSWORD:        EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_DXE_BS_EC_BOOT_OPTION_LOAD_ERROR:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_DXE_BS_EC_BOOT_OPTION_FAILED:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
@@ -873,7 +873,7 @@ pub const EFI_SW_EC_IPF_SINGLE_STEP:         EfiStatusCodeValue = debug_support:
 
 /// Software Class PEI Service Subclass Error Code definitions.
 ///
-pub const EFI_SW_PS_EC_RESET_NOT_AVAILABLE:     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_PS_EC_RESET_NOT_AVAILABLE:     EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_PS_EC_MEMORY_INSTALLED_TWICE:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 
 /// Software Class EFI Boot Service Subclass Error Code definitions.
@@ -889,7 +889,7 @@ pub const EFI_SW_DXE_BS_PC_VERIFYING_PASSWORD:        EfiStatusCodeValue = EFI_S
 
 /// Software Class DXE RT Driver Subclass Progress Code definitions.
 ///
-pub const EFI_SW_DXE_RT_PC_S0:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000000;
+pub const EFI_SW_DXE_RT_PC_S0:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC;
 pub const EFI_SW_DXE_RT_PC_S1:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000001;
 pub const EFI_SW_DXE_RT_PC_S2:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000002;
 pub const EFI_SW_DXE_RT_PC_S3:  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000003;
