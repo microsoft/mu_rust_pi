@@ -25,7 +25,7 @@ use core::fmt;
 ///
 /// All targets currently assume that that the boot mode is represented as a u32
 #[repr(u32)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Mode {
     /// The basic S0 boot path. Informs all PEIMs to do a full configuration. The basic S0 boot path must be supported.
     BootWithFullConfiguration,
@@ -84,5 +84,62 @@ impl fmt::Display for Mode {
             },
             *self as u32
         )
+    }
+}
+
+impl core::convert::TryFrom<u32> for Mode {
+    type Error = ();
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Mode::BootWithFullConfiguration),
+            1 => Ok(Mode::BootWithMinimalConfiguration),
+            2 => Ok(Mode::BootAssumingNoConfigurationChanges),
+            3 => Ok(Mode::BootWithFullConfigurationPlusDiagnostic),
+            4 => Ok(Mode::BootWithDefaultSettings),
+            5 => Ok(Mode::BootOnS4Resume),
+            6 => Ok(Mode::BootOnS5Resume),
+            7 => Ok(Mode::BootWithMfgModeSettings),
+            0x10 => Ok(Mode::BootOnS2Resume),
+            0x11 => Ok(Mode::BootOnS3Resume),
+            0x12 => Ok(Mode::BootOnFlashUpdate),
+            0x20 => Ok(Mode::BootInRecoveryMode),
+            _ => Err(()),
+        }
+    }
+}
+
+// Add unit tests for Mode
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::convert::TryFrom;
+
+    #[test]
+    fn test_try_from() {
+        assert_eq!(Mode::try_from(0x0).unwrap(), Mode::BootWithFullConfiguration);
+        assert_eq!(Mode::try_from(0x1).unwrap(), Mode::BootWithMinimalConfiguration);
+        assert_eq!(Mode::try_from(0x2).unwrap(), Mode::BootAssumingNoConfigurationChanges);
+        assert_eq!(Mode::try_from(0x3).unwrap(), Mode::BootWithFullConfigurationPlusDiagnostic);
+        assert_eq!(Mode::try_from(0x4).unwrap(), Mode::BootWithDefaultSettings);
+        assert_eq!(Mode::try_from(0x5).unwrap(), Mode::BootOnS4Resume);
+        assert_eq!(Mode::try_from(0x6).unwrap(), Mode::BootOnS5Resume);
+        assert_eq!(Mode::try_from(0x7).unwrap(), Mode::BootWithMfgModeSettings);
+        assert_eq!(Mode::try_from(0x10).unwrap(), Mode::BootOnS2Resume);
+        assert_eq!(Mode::try_from(0x11).unwrap(), Mode::BootOnS3Resume);
+        assert_eq!(Mode::try_from(0x12).unwrap(), Mode::BootOnFlashUpdate);
+        assert_eq!(Mode::try_from(0x20).unwrap(), Mode::BootInRecoveryMode);
+        assert!(Mode::try_from(999).is_err());
+    }
+
+    #[test]
+    fn test_invalid_values() {
+        let invalid_values = [
+            0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D,
+            0x1E, 0x1F, 0x21,
+        ];
+        for &value in &invalid_values {
+            assert!(Mode::try_from(value).is_err());
+        }
     }
 }
