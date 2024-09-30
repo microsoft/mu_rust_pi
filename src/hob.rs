@@ -5,7 +5,7 @@
 //!
 //! ## Example
 //! ```
-//! use mu_pi::{hob, hob::Hob, hob::HobList};
+//! use mu_pi::{BootMode, hob, hob::Hob, hob::HobList};
 //! use core::mem::size_of;
 //!
 //! // Generate HOBs to initialize a new HOB list

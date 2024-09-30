@@ -1,31 +1,29 @@
-//! Boot Mode
-//!
-//! The system boot mode indicates the "mode" in which the system is booting. The boot mode concept allows the firmware
-//! to accommodate system initialization specific to a given set of circumstances represented by the boot mode. It is
-//! a single value set in the HOB producer phase (e.g. PEI) and passed to the DXE phase via the Phase Handoff
-//! Information Table (PHIT) HOB. During the HOB producer phase, various modules may modify the boot mode until it
-//! settles upon a final value before being passed to the DXE phase.
-//!
-//! See <https://uefi.org/specs/PI/1.8A/V1_Boot_Paths.html#defined-boot-modes>
-//! See <https://uefi.org/specs/PI/1.8A/V3_HOB_Code_Definitions.html#efi-hob-handoff-info-table-phit-hob>
-//!
-//! ## Example
-//! ```
-//! use mu_pi::BootMode;
-//!
-//! let boot_mode = BootMode::BootWithFullConfiguration;
-//! println!("Boot Mode: {}", boot_mode);
-//!
-//! ## License
-//!
-//! Copyright (c) Microsoft Corporation
-//!
-//! SPDX-License-Identifier: BSD-2-Clause-Patent
-//!
-
 use core::fmt;
 
-// All targets currently assume that that the boot mode is represented as a u32
+/// # Boot Mode
+///
+/// The system boot mode indicates the "mode" in which the system is booting. The boot mode concept allows the firmware
+/// to accommodate system initialization specific to a given set of circumstances represented by the boot mode. It is
+/// a single value set in the HOB producer phase (e.g. PEI) and passed to the DXE phase via the Phase Handoff
+/// Information Table (PHIT) HOB. During the HOB producer phase, various modules may modify the boot mode until it
+/// settles upon a final value before being passed to the DXE phase.
+///
+/// ## References
+///
+/// - See [PI Spec 1.8A - Defined Boot Modes](https://uefi.org/specs/PI/1.8A/V1_Boot_Paths.html#defined-boot-modes)
+/// - See [PI SPec 1.8A - PHIT HOB](https://uefi.org/specs/PI/1.8A/V3_HOB_Code_Definitions.html#efi-hob-handoff-info-table-phit-hob>)
+///
+/// ## Example
+/// ```
+/// use mu_pi::BootMode;
+///
+/// let boot_mode = BootMode::BootWithFullConfiguration;
+/// println!("Boot Mode: {}", boot_mode);
+/// ```
+///
+/// ## Note
+///
+/// All targets currently assume that that the boot mode is represented as a u32
 #[repr(u32)]
 #[derive(Copy, Clone, Debug)]
 pub enum Mode {
