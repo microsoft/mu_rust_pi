@@ -156,8 +156,7 @@ impl<'a> FirmwareVolume<'a> {
         let fv_header = unsafe { &*(buffer.as_ptr() as *const fv::Header) };
 
         // signature: must be ASCII '_FVH'
-        if fv_header.signature != 0x4856465f {
-            //'_FVH'
+        if fv_header.signature != u32::from_le_bytes(*b"_FVH") {
             Err(efi::Status::VOLUME_CORRUPTED)?;
         }
 
@@ -290,6 +289,11 @@ impl<'a> FirmwareVolume<'a> {
     /// Contents of the FirmwareVolume will be cached in this instance.
     pub unsafe fn new_from_address(base_address: u64) -> Result<Self, efi::Status> {
         let fv_header = &*(base_address as *const fv::Header);
+        if fv_header.signature != u32::from_le_bytes(*b"_FVH") {
+            // base_address is not the start of a firmware volume.
+            return Err(efi::Status::VOLUME_CORRUPTED);
+        }
+
         let fv_buffer = slice::from_raw_parts(base_address as *const u8, fv_header.fv_length as usize);
         Self::new(fv_buffer)
     }
