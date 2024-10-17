@@ -591,7 +591,7 @@ pub const EFI_SW_DXE_BS_PC_VARIABLE_RECLAIM:              EfiStatusCodeValue = E
 pub const EFI_SW_DXE_BS_PC_ATTEMPT_BOOT_ORDER_EVENT:      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000007;
 pub const EFI_SW_DXE_BS_PC_CONFIG_RESET:                  EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000008;
 pub const EFI_SW_DXE_BS_PC_CSM_INIT:                      EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x00000009;
-pub const EFI_SW_DXE_BS_PC_BOOT_OPTION_COMPLETE:          EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x0000000A;   // MS_CHANGE
+pub const EFI_SW_DXE_BS_PC_BOOT_OPTION_COMPLETE:          EfiStatusCodeValue = EFI_SUBCLASS_SPECIFIC | 0x0000000A;   // MU_CHANGE
 
 /// Software Class SMM Driver Subclass Progress Code definitions.
 ///
@@ -757,8 +757,6 @@ pub const EFI_SW_EC_EVENT_LOG_FULL:                  EfiStatusCodeValue = 0x0000
 pub const EFI_SW_EC_WRITE_PROTECTED:                 EfiStatusCodeValue = 0x00000012;
 pub const EFI_SW_EC_FV_CORRUPTED:                    EfiStatusCodeValue = 0x00000013;
 pub const EFI_SW_EC_INCONSISTENT_MEMORY_MAP:         EfiStatusCodeValue = 0x00000014;
-pub const EFI_SW_EC_MEMORY_TYPE_INFORMATION_CHANGE:  EfiStatusCodeValue = 0x00000015; // MU_CHANGE
-pub const EFI_SW_EC_RELEASE_ASSERT:                  EfiStatusCodeValue = 0x00000016; // MU_CHANGE
 
 /// Software Class Unspecified Subclass Error Code definitions.
 ///
