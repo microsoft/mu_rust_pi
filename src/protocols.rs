@@ -15,6 +15,7 @@ pub mod firmware_volume;
 pub mod firmware_volume_block;
 pub mod metronome;
 pub mod runtime;
+pub mod security;
 pub mod status_code;
 pub mod timer;
 pub mod watchdog;
