@@ -11,8 +11,6 @@
 //! SPDX-License-Identifier: BSD-2-Clause-Patent
 //!
 
-use core::ffi::c_void;
-
 use r_efi::efi;
 
 /// CPU Architectrural Protocol GUID
@@ -74,7 +72,7 @@ pub type EfiExceptionType = isize;
 ///
 /// # Documentation
 /// UEFI Specification version 2.10, Section 18.2.4
-pub type EfiSystemContext = *mut c_void;
+pub type EfiSystemContext = efi::protocols::debug_support::SystemContext;
 
 /// Function type definition for interrupt handler.
 ///
