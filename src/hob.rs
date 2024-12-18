@@ -82,6 +82,7 @@ use indoc::indoc;
 
 // Expectation is someone will provide alloc
 extern crate alloc;
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 // If the target is x86_64, then EfiPhysicalAddress is u64
@@ -671,6 +672,53 @@ impl HobTrait for Hob<'_> {
     }
 }
 
+/// Calculates the total size of a HOB list in bytes.
+///
+/// This function iterates through the HOB list starting from the given pointer,
+/// summing up the lengths of each HOB until it reaches the end of the list.
+///
+/// # Arguments
+///
+/// * `hob_list` - A pointer to the start of the HOB list as a C structure.
+///
+/// # Returns
+///
+/// The total size of the HOB list in bytes.
+///
+/// # Safety
+///
+/// This function is unsafe because it uses a raw pointer to traverse memory and read data.
+///
+/// # Example
+///
+/// ```
+/// use mu_pi::hob::get_c_hob_list_size;
+/// use core::ffi::c_void;
+///
+/// // Assuming `hob_list` is a valid pointer to a HOB list
+/// # let some_val = 0;
+/// # let hob_list = &some_val as *const _ as *const c_void;
+/// let hob_list_ptr: *const c_void = hob_list;
+/// let size = unsafe { get_c_hob_list_size(hob_list_ptr) };
+/// println!("HOB list size: {}", size);
+/// ```
+pub unsafe fn get_c_hob_list_size(hob_list: *const c_void) -> usize {
+    let mut hob_header: *const header::Hob = hob_list as *const header::Hob;
+    let mut hob_list_len = 0;
+
+    loop {
+        let current_header = unsafe { hob_header.cast::<header::Hob>().as_ref().expect("Could not get hob list len") };
+        hob_list_len += current_header.length as usize;
+        if current_header.r#type == END_OF_HOB_LIST {
+            break;
+        }
+        let next_hob = hob_header as usize + current_header.length as usize;
+        hob_header = next_hob as *const header::Hob;
+    }
+
+    hob_list_len
+}
+
 impl<'a> HobList<'a> {
     /// Instantiates a Hoblist.
     pub fn new() -> Self {
@@ -697,6 +745,27 @@ impl<'a> HobList<'a> {
     /// ```
     pub fn iter(&self) -> impl Iterator<Item = &Hob> {
         self.0.iter()
+    }
+
+    /// Returns a mutable pointer to the underlying data.
+    ///
+    /// # Example(s)
+    ///
+    /// ```no_run
+    /// use core::ffi::c_void;
+    /// use mu_pi::hob::HobList;
+    ///
+    /// fn example(hob_list: *const c_void) {
+    ///     // example discovering and adding hobs to a hob list
+    ///     let mut the_hob_list = HobList::default();
+    ///     the_hob_list.discover_hobs(hob_list);
+    ///
+    ///     let ptr: *mut c_void = the_hob_list.as_mut_ptr();
+    ///     // ... do something with the pointer
+    /// }
+    /// ```
+    pub fn as_mut_ptr<T>(&mut self) -> *mut T {
+        self.0.as_mut_ptr() as *mut T
     }
 
     /// Returns the size of the Hoblist in bytes.
@@ -899,6 +968,122 @@ impl<'a> HobList<'a> {
             hob_header = next_hob as *const header::Hob;
         }
     }
+
+    /// Relocates all HOBs in the list to new memory locations.
+    ///
+    /// This function creates new instances of each HOB in the list and updates the list to point to these new instances.
+    ///
+    /// # Example(s)
+    ///
+    /// ```no_run
+    /// use core::ffi::c_void;
+    /// use mu_pi::hob::HobList;
+    ///
+    /// fn example(hob_list: *const c_void) {
+    ///     // example discovering and adding hobs to a hob list
+    ///     let mut the_hob_list = HobList::default();
+    ///     the_hob_list.discover_hobs(hob_list);
+    ///
+    ///     // relocate hobs to new memory locations
+    ///     the_hob_list.relocate_hobs();
+    /// }
+    /// ```
+    pub fn relocate_hobs(&mut self) {
+        let mut new_hobs = Vec::new();
+        for hob in self.0.iter() {
+            let new_hob = match hob {
+                Hob::Handoff(hob) => {
+                    let new_hob = Box::new(PhaseHandoffInformationTable {
+                        header: hob.header,
+                        version: hob.version,
+                        boot_mode: hob.boot_mode,
+                        memory_top: hob.memory_top,
+                        memory_bottom: hob.memory_bottom,
+                        free_memory_top: hob.free_memory_top,
+                        free_memory_bottom: hob.free_memory_bottom,
+                        end_of_hob_list: hob.end_of_hob_list,
+                    });
+                    Hob::Handoff(Box::leak(new_hob))
+                }
+                Hob::MemoryAllocation(hob) => {
+                    let new_hob =
+                        Box::new(MemoryAllocation { header: hob.header, alloc_descriptor: hob.alloc_descriptor });
+                    Hob::MemoryAllocation(Box::leak(new_hob))
+                }
+                Hob::MemoryAllocationModule(hob) => {
+                    let new_hob = Box::new(MemoryAllocationModule {
+                        header: hob.header,
+                        alloc_descriptor: hob.alloc_descriptor,
+                        module_name: hob.module_name,
+                        entry_point: hob.entry_point,
+                    });
+                    Hob::MemoryAllocationModule(Box::leak(new_hob))
+                }
+                Hob::Capsule(hob) => {
+                    let new_hob =
+                        Box::new(Capsule { header: hob.header, base_address: hob.base_address, length: hob.length });
+                    Hob::Capsule(Box::leak(new_hob))
+                }
+                Hob::ResourceDescriptor(hob) => {
+                    let new_hob = Box::new(ResourceDescriptor {
+                        header: hob.header,
+                        owner: hob.owner,
+                        resource_type: hob.resource_type,
+                        resource_attribute: hob.resource_attribute,
+                        physical_start: hob.physical_start,
+                        resource_length: hob.resource_length,
+                    });
+                    Hob::ResourceDescriptor(Box::leak(new_hob))
+                }
+                Hob::GuidHob(hob, data) => {
+                    let new_hob = Box::new(GuidHob { header: hob.header, name: hob.name });
+                    Hob::GuidHob(Box::leak(new_hob), data)
+                }
+                Hob::FirmwareVolume(hob) => {
+                    let new_hob = Box::new(FirmwareVolume {
+                        header: hob.header,
+                        base_address: hob.base_address,
+                        length: hob.length,
+                    });
+                    Hob::FirmwareVolume(Box::leak(new_hob))
+                }
+                Hob::FirmwareVolume2(hob) => {
+                    let new_hob = Box::new(FirmwareVolume2 {
+                        header: hob.header,
+                        base_address: hob.base_address,
+                        length: hob.length,
+                        fv_name: hob.fv_name,
+                        file_name: hob.file_name,
+                    });
+                    Hob::FirmwareVolume2(Box::leak(new_hob))
+                }
+                Hob::FirmwareVolume3(hob) => {
+                    let new_hob = Box::new(FirmwareVolume3 {
+                        header: hob.header,
+                        base_address: hob.base_address,
+                        length: hob.length,
+                        authentication_status: hob.authentication_status,
+                        extracted_fv: hob.extracted_fv,
+                        fv_name: hob.fv_name,
+                        file_name: hob.file_name,
+                    });
+                    Hob::FirmwareVolume3(Box::leak(new_hob))
+                }
+                Hob::Cpu(hob) => {
+                    let new_hob = Box::new(Cpu {
+                        header: hob.header,
+                        size_of_memory_space: hob.size_of_memory_space,
+                        size_of_io_space: hob.size_of_io_space,
+                        reserved: hob.reserved,
+                    });
+                    Hob::Cpu(Box::leak(new_hob))
+                }
+                Hob::Misc(hob_type) => Hob::Misc(*hob_type),
+            };
+            new_hobs.push(new_hob);
+        }
+        self.0 = new_hobs;
+    }
 }
 
 /// Implements IntoIterator for HobList.
@@ -984,6 +1169,17 @@ impl fmt::Debug for HobList<'_> {
                         GUID HOB
                           HOB Length: 0x{:x}\n"},
                         hob.header.length
+                    )?;
+                }
+                Hob::FirmwareVolume(hob) => {
+                    write!(
+                        f,
+                        indoc! {"
+                        FIRMWARE VOLUME (FV) HOB
+                          HOB Length: 0x{:x}
+                          Base Address: 0x{:x}
+                          Length: 0x{:x}\n"},
+                        hob.header.length, hob.base_address, hob.length
                     )?;
                 }
                 Hob::FirmwareVolume2(hob) => {
