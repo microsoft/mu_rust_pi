@@ -721,7 +721,7 @@ pub unsafe fn get_c_hob_list_size(hob_list: *const c_void) -> usize {
 
 impl<'a> HobList<'a> {
     /// Instantiates a Hoblist.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         HobList(Vec::new())
     }
 
