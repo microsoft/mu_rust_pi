@@ -1098,6 +1098,15 @@ impl<'a> IntoIterator for HobList<'a> {
     }
 }
 
+impl<'a> IntoIterator for &'a HobList<'a> {
+    type Item = &'a Hob<'a>;
+    type IntoIter = core::slice::Iter<'a, Hob<'a>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 /// Implements Debug for Hoblist.
 ///
 /// Writes Hoblist debug information to stdio
@@ -1803,5 +1812,46 @@ mod tests {
         }
 
         manually_free_c_array(c_array_hoblist, length);
+    }
+
+    #[test]
+    fn test_hob_iterator2() {
+        let resource = gen_resource_descriptor();
+        let handoff = gen_phase_handoff_information_table();
+        let firmware_volume = gen_firmware_volume();
+        let firmware_volume2 = gen_firmware_volume2();
+        let firmware_volume3 = gen_firmware_volume3();
+        let capsule = gen_capsule();
+        let guid_hob = gen_guid_hob();
+        let memory_allocation = gen_memory_allocation();
+        let memory_allocation_module = gen_memory_allocation_module();
+        let cpu = gen_cpu();
+        let end_of_hob_list = gen_end_of_hoblist();
+
+        // create a new hoblist
+        let mut hoblist = HobList::new();
+
+        // Push the resource descriptor to the hoblist
+        hoblist.push(Hob::ResourceDescriptor(&resource));
+        hoblist.push(Hob::Handoff(&handoff));
+        hoblist.push(Hob::FirmwareVolume(&firmware_volume));
+        hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
+        hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
+        hoblist.push(Hob::Capsule(&capsule));
+        hoblist.push(Hob::GuidHob(&guid_hob, &[0u8; 0]));
+        hoblist.push(Hob::MemoryAllocation(&memory_allocation));
+        hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
+        hoblist.push(Hob::Cpu(&cpu));
+        hoblist.push(Hob::Handoff(&end_of_hob_list));
+
+        // Make sure we can iterate over a reference to a HobList without
+        // consuming it.
+        for hob in &hoblist {
+            println!("{:?}", hob.header());
+        }
+
+        for hob in hoblist {
+            println!("{:?}", hob.header());
+        }
     }
 }
