@@ -4,9 +4,15 @@ Platform Initialization (PI) Specification definitions and support code in rust.
 
 This repository is part of [Project Mu](https://microsoft.github.io/mu).
 
+## Current State
+
+This repository is in the early stages of development. The crate is not complete and should not be used in production
+at this time. Major changes to the API may occur. We are interested in feedback and contributions and we want the
+flexibility to make changes as needed.
+
 ## Requirements
 
-- rustc >= 1.68.0
+![rustc Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmicrosoft%2Fmu_rust_pi%2Frefs%2Fheads%2Fmain%2Frust-toolchain.toml&query=%24.toolchain.channel&style=for-the-badge&logo=rust&logoColor=FFC832&label=rustc%20version&color=0B7261)
 
 ## Build
 
