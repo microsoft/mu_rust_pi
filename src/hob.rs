@@ -475,10 +475,7 @@ pub struct ResourceDescriptorV2 {
 impl From<ResourceDescriptor> for ResourceDescriptorV2 {
     fn from(mut v1: ResourceDescriptor) -> Self {
         v1.header.r#type = RESOURCE_DESCRIPTOR2;
-        ResourceDescriptorV2 {
-            v1: v1,
-            attributes: 0,
-        }
+        ResourceDescriptorV2 { v1: v1, attributes: 0 }
     }
 }
 
@@ -1493,10 +1490,7 @@ mod tests {
         let mut v1 = gen_resource_descriptor();
         v1.header.r#type = hob::RESOURCE_DESCRIPTOR2;
 
-        hob::ResourceDescriptorV2 {
-            v1: v1,
-            attributes: 8
-        }
+        hob::ResourceDescriptorV2 { v1: v1, attributes: 8 }
     }
 
     // Generate a test phase handoff information table hob
