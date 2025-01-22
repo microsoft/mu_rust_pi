@@ -113,6 +113,7 @@ pub const FV2: u16 = 0x0009;
 pub const LOAD_PEIM_UNUSED: u16 = 0x000A;
 pub const UEFI_CAPSULE: u16 = 0x000B;
 pub const FV3: u16 = 0x000C;
+pub const RESOURCE_DESCRIPTOR2: u16 = 0x000D;
 pub const UNUSED: u16 = 0xFFFE;
 pub const END_OF_HOB_LIST: u16 = 0xFFFF;
 
@@ -454,6 +455,33 @@ impl ResourceDescriptor {
     }
 }
 
+/// Describes the resource properties of all fixed,
+/// nonrelocatable resource ranges found on the processor
+/// host bus during the HOB producer phase.
+///
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct ResourceDescriptorV2 {
+    // EFI_HOB_RESOURCE_DESCRIPTOR
+    /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_RESOURCE_DESCRIPTOR.
+    ///
+    pub v1: ResourceDescriptor,
+
+    /// The number of bytes of the resource region.
+    ///
+    pub attributes: u64,
+}
+
+impl From<ResourceDescriptor> for ResourceDescriptorV2 {
+    fn from(mut v1: ResourceDescriptor) -> Self {
+        v1.header.r#type = RESOURCE_DESCRIPTOR2;
+        ResourceDescriptorV2 {
+            v1: v1,
+            attributes: 0,
+        }
+    }
+}
+
 /// Allows writers of executable content in the HOB producer phase to
 /// maintain and manage HOBs with specific GUID.
 ///
@@ -627,6 +655,7 @@ pub enum Hob<'a> {
     FirmwareVolume2(&'a FirmwareVolume2),
     FirmwareVolume3(&'a FirmwareVolume3),
     Cpu(&'a Cpu),
+    ResourceDescriptorV2(&'a ResourceDescriptorV2),
     Misc(u16),
 }
 
@@ -650,6 +679,7 @@ impl HobTrait for Hob<'_> {
             Hob::FirmwareVolume2(_) => size_of::<FirmwareVolume2>(),
             Hob::FirmwareVolume3(_) => size_of::<FirmwareVolume3>(),
             Hob::Cpu(_) => size_of::<Cpu>(),
+            Hob::ResourceDescriptorV2(_) => size_of::<ResourceDescriptorV2>(),
             Hob::Misc(_) => size_of::<u16>(),
         }
     }
@@ -667,6 +697,7 @@ impl HobTrait for Hob<'_> {
             Hob::FirmwareVolume2(hob) => *hob as *const FirmwareVolume2 as *const _,
             Hob::FirmwareVolume3(hob) => *hob as *const FirmwareVolume3 as *const _,
             Hob::Cpu(hob) => *hob as *const Cpu as *const _,
+            Hob::ResourceDescriptorV2(hob) => *hob as *const ResourceDescriptorV2 as *const _,
             Hob::Misc(hob) => *hob as *const u16 as *const _,
         }
     }
@@ -957,6 +988,12 @@ impl<'a> HobList<'a> {
                     let capsule_hob = unsafe { hob_header.cast::<Capsule>().as_ref().expect(NOT_NULL) };
                     self.0.push(Hob::Capsule(capsule_hob));
                 }
+                RESOURCE_DESCRIPTOR2 => {
+                    assert_hob_size::<ResourceDescriptorV2>(current_header);
+                    let resource_desc_hob =
+                        unsafe { hob_header.cast::<ResourceDescriptorV2>().as_ref().expect(NOT_NULL) };
+                    self.0.push(Hob::ResourceDescriptorV2(resource_desc_hob));
+                }
                 END_OF_HOB_LIST => {
                     break;
                 }
@@ -1077,6 +1114,20 @@ impl<'a> HobList<'a> {
                         reserved: hob.reserved,
                     });
                     Hob::Cpu(Box::leak(new_hob))
+                }
+                Hob::ResourceDescriptorV2(hob) => {
+                    let new_hob = Box::new(ResourceDescriptorV2 {
+                        v1: ResourceDescriptor {
+                            header: hob.v1.header,
+                            owner: hob.v1.owner,
+                            resource_type: hob.v1.resource_type,
+                            resource_attribute: hob.v1.resource_attribute,
+                            physical_start: hob.v1.physical_start,
+                            resource_length: hob.v1.resource_length,
+                        },
+                        attributes: hob.attributes,
+                    });
+                    Hob::ResourceDescriptorV2(Box::leak(new_hob))
                 }
                 Hob::Misc(hob_type) => Hob::Misc(*hob_type),
             };
@@ -1231,6 +1282,25 @@ impl fmt::Debug for HobList<'_> {
                         hob.base_address, hob.length
                     )?;
                 }
+                Hob::ResourceDescriptorV2(hob) => {
+                    write!(
+                        f,
+                        indoc! {"
+                        RESOURCE DESCRIPTOR 2 HOB
+                          HOB Length: 0x{:x}
+                          Resource Type: 0x{:x}
+                          Resource Attribute Type: 0x{:x}
+                          Resource Start Address: 0x{:x}
+                          Resource Length: 0x{:x}
+                          Attibutes: 0x{:x}\n"},
+                        hob.v1.header.length,
+                        hob.v1.resource_type,
+                        hob.v1.resource_attribute,
+                        hob.v1.physical_start,
+                        hob.v1.resource_length,
+                        hob.attributes
+                    )?;
+                }
                 _ => (),
             }
         }
@@ -1251,6 +1321,7 @@ impl Hob<'_> {
             Hob::FirmwareVolume2(hob) => hob.header,
             Hob::FirmwareVolume3(hob) => hob.header,
             Hob::Cpu(hob) => hob.header,
+            Hob::ResourceDescriptorV2(hob) => hob.v1.header,
             Hob::Misc(hob_type) => {
                 header::Hob { r#type: *hob_type, length: mem::size_of::<header::Hob>() as u16, reserved: 0 }
             }
@@ -1308,6 +1379,9 @@ impl<'a> Iterator for HobIter<'a> {
                 FV3 => Hob::FirmwareVolume3((self.hob_ptr as *const FirmwareVolume3).as_ref().expect(NOT_NULL)),
                 CPU => Hob::Cpu((self.hob_ptr as *const Cpu).as_ref().expect(NOT_NULL)),
                 UEFI_CAPSULE => Hob::Capsule((self.hob_ptr as *const Capsule).as_ref().expect(NOT_NULL)),
+                RESOURCE_DESCRIPTOR2 => {
+                    Hob::ResourceDescriptorV2((self.hob_ptr as *const &ResourceDescriptorV2).as_ref().expect(NOT_NULL))
+                }
                 END_OF_HOB_LIST => return None,
                 hob_type => Hob::Misc(hob_type),
             }
@@ -1409,6 +1483,19 @@ mod tests {
             resource_attribute: hob::EFI_RESOURCE_ATTRIBUTE_PRESENT,
             physical_start: 0,
             resource_length: 0x0123456789abcdef,
+        }
+    }
+
+    // Generate a test resource descriptor hob
+    // # Returns
+    // A ResourceDescriptor hob
+    fn gen_resource_descriptorv2() -> hob::ResourceDescriptorV2 {
+        let mut v1 = gen_resource_descriptor();
+        v1.header.r#type = hob::RESOURCE_DESCRIPTOR2;
+
+        hob::ResourceDescriptorV2 {
+            v1: v1,
+            attributes: 8
         }
     }
 
