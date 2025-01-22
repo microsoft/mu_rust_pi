@@ -455,6 +455,10 @@ impl ResourceDescriptor {
     }
 }
 
+/// PI Spec Status: Pending.
+/// This change is checked in as a code first approach. The PI spec will be updated
+/// to reflect this change in the future.
+///
 /// Describes the resource properties of all fixed,
 /// nonrelocatable resource ranges found on the processor
 /// host bus during the HOB producer phase.
@@ -467,7 +471,7 @@ pub struct ResourceDescriptorV2 {
     ///
     pub v1: ResourceDescriptor,
 
-    /// The number of bytes of the resource region.
+    /// The attributes of the resource described by this HOB.
     ///
     pub attributes: u64,
 }
