@@ -1289,7 +1289,7 @@ impl fmt::Debug for HobList<'_> {
                           Resource Attribute Type: 0x{:x}
                           Resource Start Address: 0x{:x}
                           Resource Length: 0x{:x}
-                          Attibutes: 0x{:x}\n"},
+                          Attributes: 0x{:x}\n"},
                         hob.v1.header.length,
                         hob.v1.resource_type,
                         hob.v1.resource_attribute,
@@ -1486,7 +1486,7 @@ mod tests {
     // Generate a test resource descriptor hob
     // # Returns
     // A ResourceDescriptor hob
-    fn gen_resource_descriptorv2() -> hob::ResourceDescriptorV2 {
+    fn gen_resource_descriptor_v2() -> hob::ResourceDescriptorV2 {
         let mut v1 = gen_resource_descriptor();
         v1.header.r#type = hob::RESOURCE_DESCRIPTOR2;
 
@@ -1654,6 +1654,11 @@ mod tests {
         hoblist.push(Hob::FirmwareVolume(&firmware_volume));
 
         assert_eq!(hoblist.len(), 2);
+
+        let resource_v2 = gen_resource_descriptor_v2();
+        hoblist.push(Hob::ResourceDescriptorV2(&resource_v2));
+
+        assert_eq!(hoblist.len(), 3);
     }
 
     #[test]
@@ -1732,6 +1737,7 @@ mod tests {
         let memory_allocation = gen_memory_allocation();
         let memory_allocation_module = gen_memory_allocation_module();
         let cpu = gen_cpu();
+        let resource_v2 = gen_resource_descriptor_v2();
         let end_of_hob_list = gen_end_of_hoblist();
 
         // create a new hoblist
@@ -1748,6 +1754,7 @@ mod tests {
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Cpu(&cpu));
+        hoblist.push(Hob::ResourceDescriptorV2(&resource_v2));
         hoblist.push(Hob::Handoff(&end_of_hob_list));
 
         // assert that the hoblist has 3 hobs and they are of the correct type
@@ -1785,6 +1792,10 @@ mod tests {
                 }
                 Hob::Cpu(cpu) => {
                     assert_eq!(cpu.size_of_memory_space, 0);
+                }
+                Hob::ResourceDescriptorV2(resource) => {
+                    assert_eq!(resource.v1.header.r#type, hob::RESOURCE_DESCRIPTOR2);
+                    assert_eq!(resource.v1.resource_type, hob::EFI_RESOURCE_SYSTEM_MEMORY);
                 }
                 _ => {
                     panic!("Unexpected hob type");
@@ -1907,6 +1918,7 @@ mod tests {
         let memory_allocation = gen_memory_allocation();
         let memory_allocation_module = gen_memory_allocation_module();
         let cpu = gen_cpu();
+        let resource_v2 = gen_resource_descriptor_v2();
         let end_of_hob_list = gen_end_of_hoblist();
 
         // create a new hoblist
@@ -1923,6 +1935,7 @@ mod tests {
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Cpu(&cpu));
+        hoblist.push(Hob::ResourceDescriptorV2(&resource_v2));
         hoblist.push(Hob::Handoff(&end_of_hob_list));
 
         // Make sure we can iterate over a reference to a HobList without
