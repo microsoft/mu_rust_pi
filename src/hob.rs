@@ -1804,7 +1804,7 @@ mod tests {
             count += 1;
         });
 
-        assert_eq!(count, 11);
+        assert_eq!(count, 12);
 
         // c_hoblist is a pointer to the hoblist - we need to manually free it later
         let (c_array_hoblist, length) = to_c_array(&hoblist);
