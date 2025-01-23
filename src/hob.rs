@@ -1493,6 +1493,7 @@ mod tests {
     fn gen_resource_descriptor_v2() -> hob::ResourceDescriptorV2 {
         let mut v1 = gen_resource_descriptor();
         v1.header.r#type = hob::RESOURCE_DESCRIPTOR2;
+        v1.header.length = size_of::<hob::ResourceDescriptorV2>() as u16;
 
         hob::ResourceDescriptorV2 { v1: v1, attributes: 8 }
     }
@@ -1851,6 +1852,10 @@ mod tests {
                 Hob::Handoff(handoff) => {
                     assert_eq!(handoff.memory_top, 0xdeadbeef);
                 }
+                Hob::ResourceDescriptorV2(resource) => {
+                    assert_eq!(resource.v1.header.r#type, hob::RESOURCE_DESCRIPTOR2);
+                    assert_eq!(resource.v1.resource_type, hob::EFI_RESOURCE_SYSTEM_MEMORY);
+                }
                 Hob::Cpu(cpu) => {
                     assert_eq!(cpu.size_of_memory_space, 0);
                 }
@@ -1861,7 +1866,7 @@ mod tests {
             count += 1;
         });
 
-        assert_eq!(count, 11);
+        assert_eq!(count, 12);
 
         // free the c array
         manually_free_c_array(c_array_hoblist, length);
