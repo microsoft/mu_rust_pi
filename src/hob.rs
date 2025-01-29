@@ -1027,114 +1027,25 @@ impl<'a> HobList<'a> {
     /// }
     /// ```
     pub fn relocate_hobs(&mut self) {
-        let mut new_hobs = Vec::new();
-        for hob in self.0.iter() {
-            let new_hob = match hob {
-                Hob::Handoff(hob) => {
-                    let new_hob = Box::new(PhaseHandoffInformationTable {
-                        header: hob.header,
-                        version: hob.version,
-                        boot_mode: hob.boot_mode,
-                        memory_top: hob.memory_top,
-                        memory_bottom: hob.memory_bottom,
-                        free_memory_top: hob.free_memory_top,
-                        free_memory_bottom: hob.free_memory_bottom,
-                        end_of_hob_list: hob.end_of_hob_list,
-                    });
-                    Hob::Handoff(Box::leak(new_hob))
-                }
-                Hob::MemoryAllocation(hob) => {
-                    let new_hob =
-                        Box::new(MemoryAllocation { header: hob.header, alloc_descriptor: hob.alloc_descriptor });
-                    Hob::MemoryAllocation(Box::leak(new_hob))
-                }
-                Hob::MemoryAllocationModule(hob) => {
-                    let new_hob = Box::new(MemoryAllocationModule {
-                        header: hob.header,
-                        alloc_descriptor: hob.alloc_descriptor,
-                        module_name: hob.module_name,
-                        entry_point: hob.entry_point,
-                    });
-                    Hob::MemoryAllocationModule(Box::leak(new_hob))
-                }
-                Hob::Capsule(hob) => {
-                    let new_hob =
-                        Box::new(Capsule { header: hob.header, base_address: hob.base_address, length: hob.length });
-                    Hob::Capsule(Box::leak(new_hob))
-                }
-                Hob::ResourceDescriptor(hob) => {
-                    let new_hob = Box::new(ResourceDescriptor {
-                        header: hob.header,
-                        owner: hob.owner,
-                        resource_type: hob.resource_type,
-                        resource_attribute: hob.resource_attribute,
-                        physical_start: hob.physical_start,
-                        resource_length: hob.resource_length,
-                    });
-                    Hob::ResourceDescriptor(Box::leak(new_hob))
-                }
+        for hob in self.0.iter_mut() {
+            match hob {
+                Hob::Handoff(hob) => *hob = Box::leak(Box::new(PhaseHandoffInformationTable::clone(hob))),
+                Hob::MemoryAllocation(hob) => *hob = Box::leak(Box::new(MemoryAllocation::clone(hob))),
+                Hob::MemoryAllocationModule(hob) => *hob = Box::leak(Box::new(MemoryAllocationModule::clone(hob))),
+                Hob::Capsule(hob) => *hob = Box::leak(Box::new(Capsule::clone(hob))),
+                Hob::ResourceDescriptor(hob) => *hob = Box::leak(Box::new(ResourceDescriptor::clone(hob))),
                 Hob::GuidHob(hob, data) => {
-                    let new_hob = Box::new(GuidHob { header: hob.header, name: hob.name });
-                    Hob::GuidHob(Box::leak(new_hob), data)
+                    *hob = Box::leak(Box::new(GuidHob::clone(hob)));
+                    *data = Vec::leak(Vec::from(*data));
                 }
-                Hob::FirmwareVolume(hob) => {
-                    let new_hob = Box::new(FirmwareVolume {
-                        header: hob.header,
-                        base_address: hob.base_address,
-                        length: hob.length,
-                    });
-                    Hob::FirmwareVolume(Box::leak(new_hob))
-                }
-                Hob::FirmwareVolume2(hob) => {
-                    let new_hob = Box::new(FirmwareVolume2 {
-                        header: hob.header,
-                        base_address: hob.base_address,
-                        length: hob.length,
-                        fv_name: hob.fv_name,
-                        file_name: hob.file_name,
-                    });
-                    Hob::FirmwareVolume2(Box::leak(new_hob))
-                }
-                Hob::FirmwareVolume3(hob) => {
-                    let new_hob = Box::new(FirmwareVolume3 {
-                        header: hob.header,
-                        base_address: hob.base_address,
-                        length: hob.length,
-                        authentication_status: hob.authentication_status,
-                        extracted_fv: hob.extracted_fv,
-                        fv_name: hob.fv_name,
-                        file_name: hob.file_name,
-                    });
-                    Hob::FirmwareVolume3(Box::leak(new_hob))
-                }
-                Hob::Cpu(hob) => {
-                    let new_hob = Box::new(Cpu {
-                        header: hob.header,
-                        size_of_memory_space: hob.size_of_memory_space,
-                        size_of_io_space: hob.size_of_io_space,
-                        reserved: hob.reserved,
-                    });
-                    Hob::Cpu(Box::leak(new_hob))
-                }
-                Hob::ResourceDescriptorV2(hob) => {
-                    let new_hob = Box::new(ResourceDescriptorV2 {
-                        v1: ResourceDescriptor {
-                            header: hob.v1.header,
-                            owner: hob.v1.owner,
-                            resource_type: hob.v1.resource_type,
-                            resource_attribute: hob.v1.resource_attribute,
-                            physical_start: hob.v1.physical_start,
-                            resource_length: hob.v1.resource_length,
-                        },
-                        attributes: hob.attributes,
-                    });
-                    Hob::ResourceDescriptorV2(Box::leak(new_hob))
-                }
-                Hob::Misc(hob_type) => Hob::Misc(*hob_type),
+                Hob::FirmwareVolume(hob) => *hob = Box::leak(Box::new(FirmwareVolume::clone(hob))),
+                Hob::FirmwareVolume2(hob) => *hob = Box::leak(Box::new(FirmwareVolume2::clone(hob))),
+                Hob::FirmwareVolume3(hob) => *hob = Box::leak(Box::new(FirmwareVolume3::clone(hob))),
+                Hob::Cpu(hob) => *hob = Box::leak(Box::new(Cpu::clone(hob))),
+                Hob::ResourceDescriptorV2(hob) => *hob = Box::leak(Box::new(ResourceDescriptorV2::clone(hob))),
+                Hob::Misc(hob_type) => *hob_type = *hob_type,
             };
-            new_hobs.push(new_hob);
         }
-        self.0 = new_hobs;
     }
 }
 
