@@ -125,7 +125,7 @@ pub mod header {
     /// All HOBs must contain this generic HOB header (EFI_HOB_GENERIC_HEADER).
     ///
     #[repr(C)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct Hob {
         // EFI_HOB_GENERIC_HEADER
         /// Identifies the HOB data structure type.
@@ -146,7 +146,7 @@ pub mod header {
     /// subsequent inclusion in the UEFI memory map.
     ///
     #[repr(C)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct MemoryAllocation {
         // EFI_HOB_MEMORY_ALLOCATION_HEADER
         /// A GUID that defines the memory allocation region's type and purpose, as well as
@@ -189,7 +189,7 @@ pub type MemoryPool = header::Hob;
 /// This HOB must be the first one in the HOB list.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PhaseHandoffInformationTable {
     /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_HANDOFF.
     ///
@@ -267,7 +267,7 @@ pub type MemoryAllocationBspStore = MemoryAllocation;
 /// Defines the location and entry point of the HOB consumer phase.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MemoryAllocationModule {
     /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_MEMORY_ALLOCATION.
     ///
@@ -411,7 +411,7 @@ pub const EFI_MEMORY_MORE_RELIABLE: u64 = 0x0000_0000_0001_0000;
 /// host bus during the HOB producer phase.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ResourceDescriptor {
     // EFI_HOB_RESOURCE_DESCRIPTOR
     /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_RESOURCE_DESCRIPTOR.
@@ -464,7 +464,7 @@ impl ResourceDescriptor {
 /// host bus during the HOB producer phase.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ResourceDescriptorV2 {
     // EFI_HOB_RESOURCE_DESCRIPTOR
     /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_RESOURCE_DESCRIPTOR.
@@ -504,7 +504,7 @@ pub struct GuidHob {
 /// Details the location of firmware volumes that contain firmware files.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FirmwareVolume {
     // EFI_HOB_FIRMWARE_VOLUME
     /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_FV.
@@ -524,7 +524,7 @@ pub struct FirmwareVolume {
 /// from a file within another firmware volume.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FirmwareVolume2 {
     // EFI_HOB_FIRMWARE_VOLUME2
     /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_FV2.
@@ -552,7 +552,7 @@ pub struct FirmwareVolume2 {
 /// from a file within another firmware volume.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct FirmwareVolume3 {
     // EFI_HOB_FIRMWARE_VOLUME3
     /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_FV3.
@@ -590,7 +590,7 @@ pub struct FirmwareVolume3 {
 /// Describes processor information, such as address space and I/O space capabilities.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Cpu {
     // EFI_HOB_CPU
     /// The HOB generic header. Header.HobType = EFI_HOB_TYPE_CPU.
@@ -617,7 +617,7 @@ pub struct Cpu {
 /// CAPSULE_FLAGS_POPULATE_SYSTEM_TABLE flag set in the EFI_CAPSULE_HEADER.
 ///
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Capsule {
     // EFI_HOB_CAPSULE
     /// The HOB generic header where Header.HobType = EFI_HOB_TYPE_UEFI_CAPSULE.
@@ -1036,14 +1036,14 @@ impl<'a> HobList<'a> {
                 Hob::ResourceDescriptor(hob) => *hob = Box::leak(Box::new(ResourceDescriptor::clone(hob))),
                 Hob::GuidHob(hob, data) => {
                     *hob = Box::leak(Box::new(GuidHob::clone(hob)));
-                    *data = Vec::leak(Vec::from(*data));
+                    *data = Box::leak(data.to_vec().into_boxed_slice());
                 }
                 Hob::FirmwareVolume(hob) => *hob = Box::leak(Box::new(FirmwareVolume::clone(hob))),
                 Hob::FirmwareVolume2(hob) => *hob = Box::leak(Box::new(FirmwareVolume2::clone(hob))),
                 Hob::FirmwareVolume3(hob) => *hob = Box::leak(Box::new(FirmwareVolume3::clone(hob))),
                 Hob::Cpu(hob) => *hob = Box::leak(Box::new(Cpu::clone(hob))),
                 Hob::ResourceDescriptorV2(hob) => *hob = Box::leak(Box::new(ResourceDescriptorV2::clone(hob))),
-                Hob::Misc(hob_type) => *hob_type = *hob_type,
+                Hob::Misc(_) => (), // Data is owned in Misc (nothing to move),
             };
         }
     }
@@ -1328,6 +1328,7 @@ mod tests {
     use core::{
         ffi::c_void,
         mem::{drop, forget, size_of},
+        ptr,
         slice::from_raw_parts,
     };
 
@@ -1460,11 +1461,19 @@ mod tests {
         hob::Capsule { header, base_address: 0, length: 0x12 }
     }
 
-    fn gen_guid_hob() -> hob::GuidHob {
-        let header =
-            hob::header::Hob { r#type: hob::GUID_EXTENSION, length: size_of::<hob::GuidHob>() as u16, reserved: 0 };
-
-        hob::GuidHob { header, name: r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]) }
+    fn gen_guid_hob() -> (hob::GuidHob, Box<[u8]>) {
+        let data = Box::new([1_u8, 2, 3, 4, 5, 6, 7, 8]);
+        (
+            hob::GuidHob {
+                header: hob::header::Hob {
+                    r#type: hob::GUID_EXTENSION,
+                    length: (size_of::<hob::GuidHob>() + data.len()) as u16,
+                    reserved: 0,
+                },
+                name: r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]),
+            },
+            data,
+        )
     }
 
     fn gen_phase_handoff_information_table() -> hob::PhaseHandoffInformationTable {
@@ -1586,7 +1595,7 @@ mod tests {
         let firmware_volume3 = gen_firmware_volume3();
         let end_of_hob_list = gen_end_of_hoblist();
         let capsule = gen_capsule();
-        let guid_hob = gen_guid_hob();
+        let (guid_hob, guid_hob_data) = gen_guid_hob();
         let memory_allocation = gen_memory_allocation();
         let memory_allocation_module = gen_memory_allocation_module();
 
@@ -1595,7 +1604,7 @@ mod tests {
         hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
         hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
         hoblist.push(Hob::Capsule(&capsule));
-        hoblist.push(Hob::GuidHob(&guid_hob, &[0u8; 0]));
+        hoblist.push(Hob::GuidHob(&guid_hob, guid_hob_data.as_ref()));
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Handoff(&end_of_hob_list));
@@ -1617,7 +1626,7 @@ mod tests {
                 }
                 Hob::GuidHob(guid_hob, data) => {
                     assert_eq!(guid_hob.name, r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]));
-                    assert_eq!(*data, [0u8; 0]);
+                    assert_eq!(*data, &[1_u8, 2, 3, 4, 5, 6, 7, 8]);
                 }
                 Hob::FirmwareVolume(firmware_volume) => {
                     assert_eq!(firmware_volume.length, 0x0123456789abcdef);
@@ -1649,7 +1658,7 @@ mod tests {
         let firmware_volume2 = gen_firmware_volume2();
         let firmware_volume3 = gen_firmware_volume3();
         let capsule = gen_capsule();
-        let guid_hob = gen_guid_hob();
+        let (guid_hob, guid_hob_data) = gen_guid_hob();
         let memory_allocation = gen_memory_allocation();
         let memory_allocation_module = gen_memory_allocation_module();
         let cpu = gen_cpu();
@@ -1666,7 +1675,7 @@ mod tests {
         hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
         hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
         hoblist.push(Hob::Capsule(&capsule));
-        hoblist.push(Hob::GuidHob(&guid_hob, &[0u8; 0]));
+        hoblist.push(Hob::GuidHob(&guid_hob, guid_hob_data.as_ref()));
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Cpu(&cpu));
@@ -1692,7 +1701,7 @@ mod tests {
                 }
                 Hob::GuidHob(guid_hob, data) => {
                     assert_eq!(guid_hob.name, r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]));
-                    assert_eq!(*data, [0u8; 0]);
+                    assert_eq!(&data[..], &guid_hob_data[..]);
                 }
                 Hob::FirmwareVolume(firmware_volume) => {
                     assert_eq!(firmware_volume.length, 0x0123456789abcdef);
@@ -1749,7 +1758,7 @@ mod tests {
                 }
                 Hob::GuidHob(guid_hob, data) => {
                     assert_eq!(guid_hob.name, r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]));
-                    assert_eq!(*data, [0u8; 0]);
+                    assert_eq!(&data[..], &[1_u8, 2, 3, 4, 5, 6, 7, 8]);
                 }
                 Hob::FirmwareVolume(firmware_volume) => {
                     assert_eq!(firmware_volume.length, 0x0123456789abcdef);
@@ -1792,7 +1801,7 @@ mod tests {
         let firmware_volume2 = gen_firmware_volume2();
         let firmware_volume3 = gen_firmware_volume3();
         let capsule = gen_capsule();
-        let guid_hob = gen_guid_hob();
+        let (guid_hob, guid_hob_data) = gen_guid_hob();
         let memory_allocation = gen_memory_allocation();
         let memory_allocation_module = gen_memory_allocation_module();
         let cpu = gen_cpu();
@@ -1808,7 +1817,7 @@ mod tests {
         hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
         hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
         hoblist.push(Hob::Capsule(&capsule));
-        hoblist.push(Hob::GuidHob(&guid_hob, &[0u8; 0]));
+        hoblist.push(Hob::GuidHob(&guid_hob, guid_hob_data.as_ref()));
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Cpu(&cpu));
@@ -1834,7 +1843,7 @@ mod tests {
         let firmware_volume2 = gen_firmware_volume2();
         let firmware_volume3 = gen_firmware_volume3();
         let capsule = gen_capsule();
-        let guid_hob = gen_guid_hob();
+        let (guid_hob, guid_hob_data) = gen_guid_hob();
         let memory_allocation = gen_memory_allocation();
         let memory_allocation_module = gen_memory_allocation_module();
         let cpu = gen_cpu();
@@ -1851,7 +1860,7 @@ mod tests {
         hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
         hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
         hoblist.push(Hob::Capsule(&capsule));
-        hoblist.push(Hob::GuidHob(&guid_hob, &[0u8; 0]));
+        hoblist.push(Hob::GuidHob(&guid_hob, guid_hob_data.as_ref()));
         hoblist.push(Hob::MemoryAllocation(&memory_allocation));
         hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
         hoblist.push(Hob::Cpu(&cpu));
@@ -1866,6 +1875,112 @@ mod tests {
 
         for hob in hoblist {
             println!("{:?}", hob.header());
+        }
+    }
+
+    #[test]
+    fn test_relocate_hobs() {
+        // generate some test hobs
+        let resource = gen_resource_descriptor();
+        let handoff = gen_phase_handoff_information_table();
+        let firmware_volume = gen_firmware_volume();
+        let firmware_volume2 = gen_firmware_volume2();
+        let firmware_volume3 = gen_firmware_volume3();
+        let capsule = gen_capsule();
+        let (guid_hob, guid_hob_data) = gen_guid_hob();
+        let memory_allocation = gen_memory_allocation();
+        let memory_allocation_module = gen_memory_allocation_module();
+        let cpu = gen_cpu();
+        let resource_v2 = gen_resource_descriptor_v2();
+        let end_of_hob_list = gen_end_of_hoblist();
+
+        // create a new hoblist
+        let mut hoblist = HobList::new();
+
+        // Push the resource descriptor to the hoblist
+        hoblist.push(Hob::ResourceDescriptor(&resource));
+        hoblist.push(Hob::Handoff(&handoff));
+        hoblist.push(Hob::FirmwareVolume(&firmware_volume));
+        hoblist.push(Hob::FirmwareVolume2(&firmware_volume2));
+        hoblist.push(Hob::FirmwareVolume3(&firmware_volume3));
+        hoblist.push(Hob::Capsule(&capsule));
+        hoblist.push(Hob::GuidHob(&guid_hob, guid_hob_data.as_ref()));
+        hoblist.push(Hob::MemoryAllocation(&memory_allocation));
+        hoblist.push(Hob::MemoryAllocationModule(&memory_allocation_module));
+        hoblist.push(Hob::Cpu(&cpu));
+        hoblist.push(Hob::Misc(12345));
+        hoblist.push(Hob::ResourceDescriptorV2(&resource_v2));
+        hoblist.push(Hob::Handoff(&end_of_hob_list));
+
+        let hoblist_address = hoblist.as_mut_ptr::<()>() as usize;
+        let hoblist_len = hoblist.len();
+        hoblist.relocate_hobs();
+        assert_eq!(
+            hoblist_address,
+            hoblist.as_mut_ptr::<()>() as usize,
+            "Only hobs need to be relocated, not the vector."
+        );
+        assert_eq!(hoblist_len, hoblist.len());
+
+        for (i, hob) in hoblist.into_iter().enumerate() {
+            match hob {
+                Hob::ResourceDescriptor(hob) if i == 0 => {
+                    assert_ne!(ptr::addr_of!(resource), hob);
+                    assert_eq!(resource, *hob);
+                }
+                Hob::Handoff(hob) if i == 1 => {
+                    assert_ne!(ptr::addr_of!(handoff), hob);
+                    assert_eq!(handoff, *hob);
+                }
+                Hob::FirmwareVolume(hob) if i == 2 => {
+                    assert_ne!(ptr::addr_of!(firmware_volume), hob);
+                    assert_eq!(firmware_volume, *hob);
+                }
+                Hob::FirmwareVolume2(hob) if i == 3 => {
+                    assert_ne!(ptr::addr_of!(firmware_volume2), hob);
+                    assert_eq!(firmware_volume2, *hob);
+                }
+                Hob::FirmwareVolume3(hob) if i == 4 => {
+                    assert_ne!(ptr::addr_of!(firmware_volume3), hob);
+                    assert_eq!(firmware_volume3, *hob);
+                }
+                Hob::Capsule(hob) if i == 5 => {
+                    assert_ne!(ptr::addr_of!(capsule), hob);
+                    assert_eq!(capsule, *hob);
+                }
+                Hob::GuidHob(hob, hob_data) if i == 6 => {
+                    assert_ne!(ptr::addr_of!(guid_hob), hob);
+                    assert_ne!(guid_hob_data.as_ptr(), hob_data.as_ptr());
+                    assert_eq!(guid_hob.header, hob.header);
+                    assert_eq!(guid_hob.name, hob.name);
+                    assert_eq!(&guid_hob_data[..], &hob_data[..]);
+                }
+                Hob::MemoryAllocation(hob) if i == 7 => {
+                    assert_ne!(ptr::addr_of!(memory_allocation), hob);
+                    assert_eq!(memory_allocation.header, hob.header);
+                    assert_eq!(memory_allocation.alloc_descriptor, hob.alloc_descriptor);
+                }
+                Hob::MemoryAllocationModule(hob) if i == 8 => {
+                    assert_ne!(ptr::addr_of!(memory_allocation_module), hob);
+                    assert_eq!(memory_allocation_module, *hob);
+                }
+                Hob::Cpu(hob) if i == 9 => {
+                    assert_ne!(ptr::addr_of!(cpu), hob);
+                    assert_eq!(cpu, *hob);
+                }
+                Hob::Misc(hob) if i == 10 => {
+                    assert_eq!(12345, hob);
+                }
+                Hob::ResourceDescriptorV2(hob) if i == 11 => {
+                    assert_ne!(ptr::addr_of!(resource_v2), hob);
+                    assert_eq!(resource_v2, *hob);
+                }
+                Hob::Handoff(hob) if i == 12 => {
+                    assert_ne!(ptr::addr_of!(end_of_hob_list), hob);
+                    assert_eq!(end_of_hob_list, *hob);
+                }
+                _ => assert!(false, "Hob at index: {i}."),
+            }
         }
     }
 }
