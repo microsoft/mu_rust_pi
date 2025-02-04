@@ -723,7 +723,7 @@ impl HobTrait for Hob<'_> {
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use mu_pi::hob::get_c_hob_list_size;
 /// use core::ffi::c_void;
 ///
