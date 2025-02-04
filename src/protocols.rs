@@ -10,6 +10,9 @@
 //!
 
 pub mod bds;
+pub mod communication;
+pub mod communication2;
+pub mod communication3;
 pub mod cpu_arch;
 pub mod firmware_volume;
 pub mod firmware_volume_block;

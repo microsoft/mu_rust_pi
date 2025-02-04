@@ -33,6 +33,7 @@
     "fvmain",
     "GIGANTOR",
     "indoc",
+    "mmram",
     "oprom",
     "rebox",
     "rustc",
