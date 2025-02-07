@@ -78,7 +78,7 @@ pub trait SectionExtractor {
     /// Extracts the given section and returns the resulting buffer.
     ///
     /// This will be called for every encapsulation section when supplied as an argument to
-    /// [`FirmwareVolume::new_with_extractor`] or [`File::new_with_extractor`].
+    /// [`File::section_iter_with_extractor`].
     ///
     /// If section extraction is successful, then the resulting buffer is returned.
     ///
@@ -398,7 +398,7 @@ pub struct File<'a> {
 impl<'a> File<'a> {
     /// Instantiates a new File by parsing the given buffer.
     ///
-    /// The normal way to obtain a File instance would be through the [`FirmwareVolume::files()`] method, but
+    /// The normal way to obtain a File instance would be through the [`FirmwareVolume::file_iter()`] method, but
     /// a constructor is provided here to enable independent instantiation of a file.
     pub fn new(buffer: &'a [u8]) -> Result<Self, efi::Status> {
         // verify that buffer has enough storage for a file header.
@@ -638,7 +638,7 @@ pub struct Section {
 impl Section {
     /// Instantiates a new Section by parsing the given buffer.
     ///
-    /// The normal way to obtain a Section instance would be through the [`File::sections()`] method, but
+    /// The normal way to obtain a Section instance would be through the [`File::section_iter()`] method, but
     /// a constructor is provided here to enable independent instantiation of a section.
     pub fn new(buffer: &[u8]) -> Result<Self, efi::Status> {
         // verify that buffer has enough storage for a section header.
