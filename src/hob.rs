@@ -642,6 +642,12 @@ impl Default for HobList<'_> {
     }
 }
 
+impl<'a> HobList<'a> {
+    pub fn length(&self) -> usize {
+        self.0.len()
+    }
+}
+
 /// Union of all the possible HOB Types.
 ///
 #[derive(Clone, Debug)]
