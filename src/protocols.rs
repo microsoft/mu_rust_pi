@@ -9,6 +9,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause-Patent
 //!
 
+pub mod acpi;
 pub mod bds;
 pub mod communication;
 pub mod communication2;
