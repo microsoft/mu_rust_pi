@@ -15,7 +15,8 @@ indoc = "2.0"
 num-traits = { version = "0.2", default-features = false }
 r-efi = { version = "5.0.0", default-features = false }
 uuid = { version = "1.8", default-features = false }
-uefi_sdk = {path = "C:/Users/sherryfan/uefi-sdk/uefi_sdk"}
+uefi_sdk = {path = "C:/Users/sherryfan/uefi-sdk/uefi_sdk" }
+spin = { version = "0.9", default-features = false, features = ["once"] }
 
 [dev-dependencies]
 serde = { version = "1.0.197", features = ["derive"]}
