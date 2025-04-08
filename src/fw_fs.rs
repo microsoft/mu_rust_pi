@@ -44,6 +44,23 @@ use r_efi::efi;
 
 use crate::address_helper::align_up;
 
+pub mod guid {
+    use r_efi::efi;
+
+    pub const BROTLI_SECTION: efi::Guid =
+        efi::Guid::from_fields(0x3D532050, 0x5CDA, 0x4FD0, 0x87, 0x9E, &[0x0F, 0x7F, 0x63, 0x0D, 0x5A, 0xFB]);
+    pub const CRC32_SECTION: efi::Guid =
+        efi::Guid::from_fields(0xFC1BCDB0, 0x7D31, 0x49aa, 0x93, 0x6A, &[0xA4, 0x60, 0x0D, 0x9D, 0xD0, 0x83]);
+    pub const LZMA_SECTION: efi::Guid =
+        efi::Guid::from_fields(0xEE4E5898, 0x3914, 0x4259, 0x9D, 0x6E, &[0xDC, 0x7B, 0xD7, 0x94, 0x03, 0xCF]);
+    pub const LZMA_F86_SECTION: efi::Guid =
+        efi::Guid::from_fields(0xD42AE6BD, 0x1352, 0x4BFB, 0x90, 0x9A, &[0xCA, 0x72, 0xA6, 0xEA, 0xE8, 0x89]);
+    pub const LZMA_PARALLEL_SECTION: efi::Guid =
+        efi::Guid::from_fields(0xBD9921EA, 0xED91, 0x404A, 0x8B, 0x2F, &[0xB4, 0xD7, 0x24, 0x74, 0x7C, 0x8C]);
+    pub const TIANO_DECOMPRESS_SECTION: efi::Guid =
+        efi::Guid::from_fields(0xA31280AD, 0x481E, 0x41B6, 0x95, 0xE8, &[0x12, 0x7F, 0x4C, 0x98, 0x47, 0x79]);
+}
+
 /// Defines an interface that can be implemented to provide extraction logic for encapsulation sections.
 ///
 /// ## Example
@@ -926,7 +943,7 @@ mod unit_tests {
     use serde::Deserialize;
     use uuid::Uuid;
 
-    use crate::fw_fs::SectionMetaData;
+    use crate::fw_fs::{guid, SectionMetaData};
 
     use super::{fv, FfsSectionType, FirmwareVolume, NullSectionExtractor, Section, SectionExtractor};
 
@@ -1072,15 +1089,7 @@ mod unit_tests {
                 let SectionMetaData::GuidDefined(metadata, _guid_specific) = section.meta_data() else {
                     panic!("Unexpected section metadata");
                 };
-                const BROTLI_SECTION_GUID: efi::Guid = efi::Guid::from_fields(
-                    0x3D532050,
-                    0x5CDA,
-                    0x4FD0,
-                    0x87,
-                    0x9E,
-                    &[0x0F, 0x7F, 0x63, 0x0D, 0x5A, 0xFB],
-                );
-                assert_eq!(metadata.section_definition_guid, BROTLI_SECTION_GUID);
+                assert_eq!(metadata.section_definition_guid, guid::BROTLI_SECTION);
                 self.invoked.store(true, core::sync::atomic::Ordering::SeqCst);
                 Ok(Box::new([0u8; 0]))
             }
