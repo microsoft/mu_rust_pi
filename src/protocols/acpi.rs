@@ -105,7 +105,6 @@ pub struct AcpiTableComponent {}
 
 impl AcpiTableComponent {
     fn entry_point(self, bs: StandardBootServices) -> uefi_sdk::error::Result<()> {
-        // register support service
         // register table + sdt services (which also installs protocols)
         initialize_acpi_table();
         Ok(())
