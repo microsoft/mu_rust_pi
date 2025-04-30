@@ -1135,12 +1135,15 @@ impl fmt::Debug for HobList<'_> {
                     )?;
                 }
                 Hob::GuidHob(hob, _data) => {
+                    let (f0, f1, f2, f3, f4, &[f5, f6, f7, f8, f9, f10]) = hob.name.as_fields();
                     write!(
                         f,
                         indoc! {"
                         GUID HOB
-                          HOB Length: 0x{:x}\n"},
-                        hob.header.length
+                          Type: {:#x}
+                          Length: {:#x},
+                          GUID: {{{:08x}-{:04x}-{:04x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}}}\n"},
+                        hob.header.r#type, hob.header.length, f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10,
                     )?;
                 }
                 Hob::FirmwareVolume(hob) => {
