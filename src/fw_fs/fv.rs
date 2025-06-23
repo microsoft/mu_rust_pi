@@ -16,6 +16,9 @@ use r_efi::efi;
 
 pub type EfiFvFileType = u8;
 
+
+pub const FFS_REVISION: u8 = 2;
+
 /// Firmware Volume Write Policy bit definitions
 /// Note: Typically named `EFI_FV_*` in EDK II code.
 mod raw {
@@ -34,19 +37,19 @@ pub enum WritePolicy {
 
 /// EFI_FIRMWARE_VOLUME_HEADER
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Header {
-    pub(crate) zero_vector: [u8; 16],
-    pub(crate) file_system_guid: efi::Guid,
-    pub(crate) fv_length: u64,
-    pub(crate) signature: u32,
-    pub(crate) attributes: u32,
-    pub(crate) header_length: u16,
-    pub(crate) checksum: u16,
-    pub(crate) ext_header_offset: u16,
-    pub(crate) reserved: u8,
-    pub(crate) revision: u8,
-    pub(crate) block_map: [BlockMapEntry; 0],
+    pub zero_vector: [u8; 16],
+    pub file_system_guid: efi::Guid,
+    pub fv_length: u64,
+    pub signature: u32,
+    pub attributes: u32,
+    pub header_length: u16,
+    pub checksum: u16,
+    pub ext_header_offset: u16,
+    pub reserved: u8,
+    pub revision: u8,
+    pub block_map: [BlockMapEntry; 0],
 }
 
 #[repr(C)]
@@ -59,7 +62,7 @@ pub struct BlockMapEntry {
 /// EFI_FIRMWARE_VOLUME_EXT_HEADER
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ExtHeader {
-    pub(crate) fv_name: efi::Guid,
-    pub(crate) ext_header_size: u32,
+pub struct ExtHeader {
+    pub fv_name: efi::Guid,
+    pub ext_header_size: u32,
 }
