@@ -11,38 +11,10 @@
 //! SPDX-License-Identifier: BSD-2-Clause-Patent
 //!
 
-extern crate alloc;
-
-use core::{fmt, mem, num::Wrapping, slice};
 
 pub mod ffs;
 pub mod fv;
 pub mod fvb;
-
-use ffs::{attributes::raw::LARGE_FILE, file, section};
-pub use ffs::{
-    attributes::{raw as FfsRawAttribute, Attribute as FfsAttribute},
-    file::{
-        raw::{r#type as FfsFileRawType, state as FfsFileRawState},
-        State as FfsFileState, Type as FfsFileType,
-    },
-    section::{
-        header as FfsSectionHeader, raw_type as FfsSectionRawType,
-        raw_type::encapsulated as FfsEncapsulatedSectionRawType, EfiSectionType, Type as FfsSectionType,
-    },
-};
-pub use fv::{
-    attributes::{raw::fv2 as Fv2RawAttributes, EfiFvAttributes, Fv2 as Fv2Attributes},
-    file::{raw::attribute as FvFileRawAttribute, Attribute as FvFileAttribute, EfiFvFileAttributes},
-    EfiFvFileType, WritePolicy,
-};
-pub use fvb::attributes::{raw::fvb2 as Fvb2RawAttributes, EfiFvbAttributes2, Fvb2 as Fvb2Attributes};
-
-use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
-use num_traits::WrappingSub;
-use r_efi::efi;
-
-use crate::address_helper::align_up;
 
 pub mod guid {
     use r_efi::efi;
@@ -60,6 +32,39 @@ pub mod guid {
     pub const TIANO_DECOMPRESS_SECTION: efi::Guid =
         efi::Guid::from_fields(0xA31280AD, 0x481E, 0x41B6, 0x95, 0xE8, &[0x12, 0x7F, 0x4C, 0x98, 0x47, 0x79]);
 }
+
+pub mod hidden {
+extern crate alloc;
+use core::{fmt, mem, num::Wrapping, slice};
+
+use r_efi::efi;
+use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
+
+use super::ffs::{attributes::raw::LARGE_FILE, file, section};
+pub use super::ffs::{
+    attributes::{raw as FfsRawAttribute, Attribute as FfsAttribute},
+    file::{
+        raw::{r#type as FfsFileRawType, state as FfsFileRawState},
+        State as FfsFileState, Type as FfsFileType,
+    },
+    section::{
+        header as FfsSectionHeader, raw_type as FfsSectionRawType,
+        raw_type::encapsulated as FfsEncapsulatedSectionRawType, EfiSectionType, Type as FfsSectionType,
+    },
+};
+pub use super::fv::{
+    attributes::{raw::fv2 as Fv2RawAttributes, EfiFvAttributes, Fv2 as Fv2Attributes},
+    file::{raw::attribute as FvFileRawAttribute, Attribute as FvFileAttribute, EfiFvFileAttributes},
+    EfiFvFileType, WritePolicy,
+};
+pub use super::fvb::attributes::{raw::fvb2 as Fvb2RawAttributes, EfiFvbAttributes2, Fvb2 as Fvb2Attributes};
+
+
+use num_traits::WrappingSub;
+
+
+use crate::{address_helper::align_up, fw_fs::{ffs, fv}};
+
 
 /// Defines an interface that can be implemented to provide extraction logic for encapsulation sections.
 ///
@@ -861,7 +866,7 @@ impl<'a> Iterator for FvFileIterator<'a> {
     }
 }
 
-struct FileSectionIterator<'a> {
+pub struct FileSectionIterator<'a> {
     buffer: &'a [u8],
     extractor: &'a dyn SectionExtractor,
     next_offset: usize,
@@ -1296,4 +1301,5 @@ mod unit_tests {
 
         Ok(())
     }
+}
 }
