@@ -628,8 +628,9 @@ pub struct Capsule {
     /// point to the base of the contiguous memory of the UEFI capsule.
     /// The length of the contiguous memory in bytes.
     ///
-    pub base_address: u8,
-    pub length: u8,
+    pub base_address: EfiPhysicalAddress,
+
+    pub length: u64,
 }
 
 /// Represents a HOB list.
@@ -924,7 +925,11 @@ impl<'a> HobList<'a> {
         fn assert_hob_size<T>(hob: &header::Hob) {
             let hob_len = hob.length as usize;
             let hob_size = mem::size_of::<T>();
-            assert_eq!(hob_len, hob_size, "Trying to cast hob of length {hob_len} into a pointer of size {hob_size}");
+            assert_eq!(
+                hob_len, hob_size,
+                "Trying to cast hob of length {hob_len} into a pointer of size {hob_size}. Hob type: {:?}",
+                hob.r#type
+            );
         }
 
         let mut hob_header: *const header::Hob = hob_list as *const header::Hob;
