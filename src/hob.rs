@@ -628,7 +628,8 @@ pub struct Capsule {
     /// point to the base of the contiguous memory of the UEFI capsule.
     /// The length of the contiguous memory in bytes.
     ///
-    pub base_address: u64,
+    pub base_address: EfiPhysicalAddress,
+
     pub length: u64,
 }
 
