@@ -1,7 +1,7 @@
 extern crate mu_pi;
-use alloc_no_stdlib::{self, define_index_ops_mut, SliceWrapper, SliceWrapperMut};
+use alloc_no_stdlib::{self, SliceWrapper, SliceWrapperMut, define_index_ops_mut};
 use brotli_decompressor::{BrotliDecompressStream, BrotliResult, BrotliState, HuffmanCode};
-use mu_pi::fw_fs::{guid, FirmwareVolume, SectionExtractor, SectionMetaData};
+use mu_pi::fw_fs::{FirmwareVolume, SectionExtractor, SectionMetaData, guid};
 use r_efi::efi;
 use std::{env, error::Error, fmt::Debug, fs, path::Path};
 

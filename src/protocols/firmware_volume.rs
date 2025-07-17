@@ -18,7 +18,7 @@ use crate::fw_fs;
 
 use fw_fs::{
     ffs::section::EfiSectionType,
-    fv::{attributes::EfiFvAttributes, file::EfiFvFileAttributes, EfiFvFileType},
+    fv::{EfiFvFileType, attributes::EfiFvAttributes, file::EfiFvFileAttributes},
 };
 
 use core::ffi::c_void;

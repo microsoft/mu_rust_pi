@@ -68,8 +68,8 @@
 //!
 
 use crate::{
-    address_helper::{align_down, align_up},
     BootMode,
+    address_helper::{align_down, align_up},
 };
 use core::{
     ffi::c_void,
@@ -1328,9 +1328,8 @@ pub struct EFiMemoryTypeInformation {
 #[cfg(test)]
 mod tests {
     use crate::{
-        hob,
+        BootMode, hob,
         hob::{Hob, HobList, HobTrait},
-        BootMode,
     };
 
     use core::{
