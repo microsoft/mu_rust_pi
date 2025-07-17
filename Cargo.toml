@@ -6,7 +6,7 @@ license = "BSD-2-Clause-Patent"
 description = "Platform Initialization (PI) Specification definitions and support code in Rust."
 repository = "https://github.com/microsoft/mu_rust_pi"
 readme = "README.md"
-rust-version = "1.68"
+rust-version = "1.85"
 keywords = ["firmware", "mu", "pi", "uefi"]
 categories = ["embedded", "hardware-support", "no-std"]
 
