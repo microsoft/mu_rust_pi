@@ -17,7 +17,7 @@ r-efi = { version = "5.0.0", default-features = false }
 uuid = { version = "1.8", default-features = false }
 
 [dev-dependencies]
-serde = { version = "1.0.197", features = ["derive"]}
+serde = { version = "1.0.219", features = ["derive"]}
 serde_yaml = "0.9.34"
 brotli-decompressor = { version= "5.0.0", default-features = false}
 alloc-no-stdlib = { version = "~2.0"}
