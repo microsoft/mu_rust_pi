@@ -21,22 +21,22 @@ pub mod fvb;
 
 use ffs::{attributes::raw::LARGE_FILE, file, section};
 pub use ffs::{
-    attributes::{raw as FfsRawAttribute, Attribute as FfsAttribute},
+    attributes::{Attribute as FfsAttribute, raw as FfsRawAttribute},
     file::{
-        raw::{r#type as FfsFileRawType, state as FfsFileRawState},
         State as FfsFileState, Type as FfsFileType,
+        raw::{state as FfsFileRawState, r#type as FfsFileRawType},
     },
     section::{
-        header as FfsSectionHeader, raw_type as FfsSectionRawType,
-        raw_type::encapsulated as FfsEncapsulatedSectionRawType, EfiSectionType, Type as FfsSectionType,
+        EfiSectionType, Type as FfsSectionType, header as FfsSectionHeader, raw_type as FfsSectionRawType,
+        raw_type::encapsulated as FfsEncapsulatedSectionRawType,
     },
 };
 pub use fv::{
-    attributes::{raw::fv2 as Fv2RawAttributes, EfiFvAttributes, Fv2 as Fv2Attributes},
-    file::{raw::attribute as FvFileRawAttribute, Attribute as FvFileAttribute, EfiFvFileAttributes},
     EfiFvFileType, WritePolicy,
+    attributes::{EfiFvAttributes, Fv2 as Fv2Attributes, raw::fv2 as Fv2RawAttributes},
+    file::{Attribute as FvFileAttribute, EfiFvFileAttributes, raw::attribute as FvFileRawAttribute},
 };
-pub use fvb::attributes::{raw::fvb2 as Fvb2RawAttributes, EfiFvbAttributes2, Fvb2 as Fvb2Attributes};
+pub use fvb::attributes::{EfiFvbAttributes2, Fvb2 as Fvb2Attributes, raw::fvb2 as Fvb2RawAttributes};
 
 use alloc::{boxed::Box, collections::VecDeque, vec::Vec};
 use num_traits::WrappingSub;
@@ -305,13 +305,17 @@ impl<'a> FirmwareVolume<'a> {
     ///
     /// Contents of the FirmwareVolume will be cached in this instance.
     pub unsafe fn new_from_address(base_address: u64) -> Result<Self, efi::Status> {
-        let fv_header = &*(base_address as *const fv::Header);
+        // SAFETY: per function safety contract, base_address is the start of a firmware volume. The firmware volume
+        // header signature is checked for a new firmware volume is returned.
+        let fv_header = unsafe { &*(base_address as *const fv::Header) };
         if fv_header.signature != u32::from_le_bytes(*b"_FVH") {
             // base_address is not the start of a firmware volume.
             return Err(efi::Status::VOLUME_CORRUPTED);
         }
 
-        let fv_buffer = slice::from_raw_parts(base_address as *const u8, fv_header.fv_length as usize);
+        // SAFETY: The slice creation is considered safe if the base address for the FV header has a valid
+        // firmware volume header signature.
+        let fv_buffer = unsafe { slice::from_raw_parts(base_address as *const u8, fv_header.fv_length as usize) };
         Self::new(fv_buffer)
     }
 
@@ -943,9 +947,9 @@ mod unit_tests {
     use serde::Deserialize;
     use uuid::Uuid;
 
-    use crate::fw_fs::{guid, SectionMetaData};
+    use crate::fw_fs::{SectionMetaData, guid};
 
-    use super::{fv, FfsSectionType, FirmwareVolume, NullSectionExtractor, Section, SectionExtractor};
+    use super::{FfsSectionType, FirmwareVolume, NullSectionExtractor, Section, SectionExtractor, fv};
 
     #[derive(Debug, Deserialize)]
     struct TargetValues {
