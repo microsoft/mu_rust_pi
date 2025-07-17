@@ -1056,7 +1056,7 @@ mod unit_tests {
         let fv = FirmwareVolume::new(&fv_bytes).unwrap();
 
         let expected_values =
-            serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("DXEFV_expected_values.yml"))?)?;
+            serde_yml::from_reader::<File, TargetValues>(File::open(root.join("DXEFV_expected_values.yml"))?)?;
 
         test_firmware_volume_worker(fv, expected_values, &NullSectionExtractor {})
     }
@@ -1069,7 +1069,7 @@ mod unit_tests {
         let fv = FirmwareVolume::new(&fv_bytes).unwrap();
 
         let expected_values =
-            serde_yaml::from_reader::<File, TargetValues>(File::open(root.join("GIGANTOR_expected_values.yml"))?)?;
+            serde_yml::from_reader::<File, TargetValues>(File::open(root.join("GIGANTOR_expected_values.yml"))?)?;
 
         test_firmware_volume_worker(fv, expected_values, &NullSectionExtractor {})
     }
@@ -1080,9 +1080,8 @@ mod unit_tests {
 
         let fv_bytes = fs::read(root.join("FVMAIN_COMPACT.Fv"))?;
 
-        let expected_values = serde_yaml::from_reader::<File, TargetValues>(File::open(
-            root.join("FVMAIN_COMPACT_expected_values.yml"),
-        )?)?;
+        let expected_values =
+            serde_yml::from_reader::<File, TargetValues>(File::open(root.join("FVMAIN_COMPACT_expected_values.yml"))?)?;
 
         struct TestExtractor {
             invoked: AtomicBool,
