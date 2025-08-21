@@ -479,7 +479,7 @@ pub struct ResourceDescriptorV2 {
 impl From<ResourceDescriptor> for ResourceDescriptorV2 {
     fn from(mut v1: ResourceDescriptor) -> Self {
         v1.header.r#type = RESOURCE_DESCRIPTOR2;
-        ResourceDescriptorV2 { v1: v1, attributes: 0 }
+        ResourceDescriptorV2 { v1, attributes: 0 }
     }
 }
 
@@ -1080,7 +1080,6 @@ impl<'a> IntoIterator for &'a HobList<'a> {
 /// Writes Hoblist debug information to stdio
 ///
 impl fmt::Debug for HobList<'_> {
-    #[cfg_attr(feature = "nightly", feature(no_coverage))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for hob in self.0.clone().into_iter() {
             match hob {
@@ -1414,7 +1413,7 @@ mod tests {
         v1.header.r#type = hob::RESOURCE_DESCRIPTOR2;
         v1.header.length = size_of::<hob::ResourceDescriptorV2>() as u16;
 
-        hob::ResourceDescriptorV2 { v1: v1, attributes: 8 }
+        hob::ResourceDescriptorV2 { v1, attributes: 8 }
     }
 
     // Generate a test phase handoff information table hob
@@ -1765,7 +1764,7 @@ mod tests {
                 }
                 Hob::GuidHob(guid_hob, data) => {
                     assert_eq!(guid_hob.name, r_efi::efi::Guid::from_fields(1, 2, 3, 4, 5, &[6, 7, 8, 9, 10, 11]));
-                    assert_eq!(&data[..], &[1_u8, 2, 3, 4, 5, 6, 7, 8]);
+                    assert_eq!(data, &[1_u8, 2, 3, 4, 5, 6, 7, 8]);
                 }
                 Hob::FirmwareVolume(firmware_volume) => {
                     assert_eq!(firmware_volume.length, 0x0123456789abcdef);
@@ -1960,7 +1959,7 @@ mod tests {
                     assert_ne!(guid_hob_data.as_ptr(), hob_data.as_ptr());
                     assert_eq!(guid_hob.header, hob.header);
                     assert_eq!(guid_hob.name, hob.name);
-                    assert_eq!(&guid_hob_data[..], &hob_data[..]);
+                    assert_eq!(&guid_hob_data[..], hob_data);
                 }
                 Hob::MemoryAllocation(hob) if i == 7 => {
                     assert_ne!(ptr::addr_of!(memory_allocation), hob);
@@ -1986,7 +1985,7 @@ mod tests {
                     assert_ne!(ptr::addr_of!(end_of_hob_list), hob);
                     assert_eq!(end_of_hob_list, *hob);
                 }
-                _ => assert!(false, "Hob at index: {i}."),
+                _ => panic!("Hob at index: {i}."),
             }
         }
     }

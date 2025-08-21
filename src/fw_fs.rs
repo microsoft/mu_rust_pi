@@ -124,7 +124,7 @@ pub struct FirmwareVolumeExtHeader<'a> {
     data: &'a [u8],
 }
 
-impl<'a> fmt::Debug for FirmwareVolumeExtHeader<'a> {
+impl fmt::Debug for FirmwareVolumeExtHeader<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FirmwareVolumeExtHeader")
             .field("header", &self.header)
@@ -375,7 +375,7 @@ impl<'a> FirmwareVolume<'a> {
     }
 }
 
-impl<'a> fmt::Debug for FirmwareVolume<'a> {
+impl fmt::Debug for FirmwareVolume<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FirmwareVolume")
             .field("attributes", &self.attributes)
@@ -602,7 +602,7 @@ impl<'a> File<'a> {
     }
 }
 
-impl<'a> fmt::Debug for File<'a> {
+impl fmt::Debug for File<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("File")
             .field("name", &self.name)
@@ -885,7 +885,7 @@ impl<'a> FileSectionIterator<'a> {
     }
 }
 
-impl<'a> Iterator for FileSectionIterator<'a> {
+impl Iterator for FileSectionIterator<'_> {
     type Item = Result<Section, efi::Status>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1197,7 +1197,7 @@ mod unit_tests {
         let a_ptr = &a as *const A;
 
         unsafe {
-            assert_eq!((&(*a_ptr).block_map).as_ptr(), a_ptr.offset(1) as *const fv::BlockMapEntry);
+            assert_eq!((*a_ptr).block_map.as_ptr(), a_ptr.offset(1) as *const fv::BlockMapEntry);
         }
     }
 
@@ -1278,7 +1278,7 @@ mod unit_tests {
             otherwise_bad => panic!("invalid section: {:x?}", otherwise_bad),
         }
 
-        let empty_freeform_subtype: [u8; 024] = [
+        let empty_freeform_subtype: [u8; 24] = [
             0x18, 0x00, 0x00, 0x18, //Header
             0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, //GUID
             0x04, 0x15, 0x19, 0x80, //Data
