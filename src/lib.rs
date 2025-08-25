@@ -28,7 +28,6 @@
 //!
 
 #![cfg_attr(not(test), no_std)]
-#![cfg_attr(feature = "nightly", feature(coverage_attribute))]
 
 mod address_helper;
 mod boot_mode;
