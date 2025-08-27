@@ -29,14 +29,19 @@
 
 #![cfg_attr(not(test), no_std)]
 
+#[macro_use]
+extern crate alloc;
+
 mod address_helper;
 mod boot_mode;
 
 pub mod dxe_services;
 pub mod fw_fs;
+#[cfg(feature = "serde")]
 pub mod hob;
 pub mod list_entry;
 pub mod protocols;
+pub mod serializable;
 pub mod status_code;
 
 pub use boot_mode::Mode as BootMode;
