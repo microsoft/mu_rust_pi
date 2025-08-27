@@ -1,4 +1,4 @@
-pub mod hob;
+pub mod serializable_hob;
 
 use r_efi::efi::Guid;
 
