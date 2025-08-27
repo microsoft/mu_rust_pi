@@ -2,9 +2,10 @@ pub mod serializable_hob;
 
 use r_efi::efi::Guid;
 
+use alloc::format;
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
-use serde::{Deserialize, Serialize};
 
 pub fn format_guid(guid: Guid) -> String {
     // We need this because refi::Guid has private fields
@@ -90,6 +91,7 @@ pub trait Interval: Clone + Ord {
 }
 
 mod hex_format {
+    use alloc::format;
     use core::fmt::LowerHex;
     use serde::Deserialize;
     use serde::{self, Deserializer, Serializer};
