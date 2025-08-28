@@ -93,21 +93,21 @@ pub enum State {
 // EFI_FFS_FILE_HEADER
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Header {
-    pub(crate) name: efi::Guid,
-    pub(crate) integrity_check_header: u8,
-    pub(crate) integrity_check_file: u8,
-    pub(crate) file_type: u8,
-    pub(crate) attributes: u8,
-    pub(crate) size: [u8; 3],
-    pub(crate) state: u8,
+pub struct Header {
+    pub name: efi::Guid,
+    pub integrity_check_header: u8,
+    pub integrity_check_file: u8,
+    pub file_type: u8,
+    pub attributes: u8,
+    pub size: [u8; 3],
+    pub state: u8,
 }
 
 // EFI_FFS_FILE_HEADER
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
-pub(crate) struct Header2 {
-    pub(crate) header: Header,
-    pub(crate) extended_size: u64,
+pub struct Header2 {
+    pub header: Header,
+    pub extended_size: u64,
 }
