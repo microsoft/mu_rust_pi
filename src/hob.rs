@@ -776,7 +776,7 @@ impl<'a> HobList<'a> {
     ///     }
     /// }
     /// ```
-    pub fn iter(&self) -> impl Iterator<Item = &Hob> {
+    pub fn iter(&self) -> impl Iterator<Item = &Hob<'_>> {
         self.0.iter()
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "mu_pi"
-version = "5.2.4"
+version = "6.0.0"
 edition = "2024"
 license = "BSD-2-Clause-Patent"
 description = "Platform Initialization (PI) Specification definitions and support code in Rust."
