@@ -6,6 +6,9 @@ use crate::{serializable::Interval, serializable::format_guid};
 use alloc::string::String;
 use serde::{Deserialize, Serialize};
 
+/// Serializable representation of the different HOB types.
+/// For more information on the usage and representation of these HOBs, see `hob.rs`.
+///
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HobSerDe {
@@ -45,12 +48,17 @@ pub enum HobSerDe {
     UnknownHob,
 }
 
+/// Serializable representation of the memory allocation descriptor inside a Memory Allocation HOB.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MemAllocDescriptorSerDe {
-    pub name: String, // GUID as a string
+    /// Name (as a GUID string).
+    pub name: String,
+    /// Start address of the memory region.
     #[serde(with = "hex_format")]
     pub memory_base_address: u64,
+    /// Length of the memory region in bytes.
     pub memory_length: u64,
+    /// Type of memory (as defined in `r_efi::System::MemoryType`).
     pub memory_type: u32,
 }
 
@@ -75,14 +83,20 @@ impl Interval for MemAllocDescriptorSerDe {
     }
 }
 
+/// Serializable representation of the resource descriptor inside a Resource Descriptor HOB.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ResourceDescriptorSerDe {
-    pub owner: String, // GUID as a string
+    /// Owner (as a GUID string).
+    pub owner: String,
+    /// Type of resource (as defined in `EFI_RESOURCE_TYPE`).
     pub resource_type: u32,
+    /// Attributes of the resource in hex format (as defined in `EFI_RESOURCE_ATTRIBUTE_TYPE`).
     #[serde(with = "hex_format")]
     pub resource_attribute: u32,
+    /// Start address of the resource.
     #[serde(with = "hex_format")]
     pub physical_start: u64,
+    /// Length of the resource in bytes.
     #[serde(with = "hex_format")]
     pub resource_length: u64,
 }
@@ -160,9 +174,7 @@ impl From<&Hob<'_>> for HobSerDe {
                 },
                 attributes: resource_desc2.attributes,
             },
-            Hob::GuidHob(guid_ext, _) => {
-                Self::GuidExtension { name: format_guid(guid_ext.name) /* data: data.to_vec() */ }
-            }
+            Hob::GuidHob(guid_ext, _) => Self::GuidExtension { name: format_guid(guid_ext.name) },
             Hob::FirmwareVolume(fv) => Self::FirmwareVolume { base_address: fv.base_address, length: fv.length },
             Hob::Cpu(cpu) => {
                 Self::Cpu { size_of_memory_space: cpu.size_of_memory_space, size_of_io_space: cpu.size_of_io_space }

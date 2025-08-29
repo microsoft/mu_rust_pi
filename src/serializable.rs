@@ -1,3 +1,21 @@
+//! Serializable UEFI/PI Structs
+//!
+//! Contains custom definitions for serializing HOBs to and from JSON format, using `serde`.
+//! This is not required by the UEFI/PI specifications, but is provided for convenience in visualizing and encoding HOBs.
+//! This crate is gated behind the `serde` feature flag. Serialization is only available when the feature is enabled.
+//!
+//! For information on the standard HOB format, see `hob.rs`.
+//!
+//! ## License
+//!
+//! Copyright (C) Microsoft Corporation. All rights reserved.
+//!
+//! SPDX-License-Identifier: BSD-2-Clause-Patent
+//!
+
+/// Helper functions for serializing data as hex strings.
+pub mod hex_format;
+/// Serializable HOB definitions.
 pub mod serializable_hob;
 
 use r_efi::efi::Guid;
@@ -7,9 +25,10 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
+/// Format a GUID as a string in the standard 8-4-4-4-12 format.
+/// This custom implementation is necessary because `r_efi::Guid` has private fields and cannot derive `Serialize` directly.
+///
 pub fn format_guid(guid: Guid) -> String {
-    // We need this because refi::Guid has private fields
-    // and we can't make it derive Serialize (can't modify efi::Guid directly)
     let (time_low, time_mid, time_hi_and_version, clk_seq_hi_res, clk_seq_low, node) = guid.as_fields();
     format!(
         "{:08x}-{:04x}-{:04x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
@@ -27,6 +46,9 @@ pub fn format_guid(guid: Guid) -> String {
     )
 }
 
+/// Represents an positive integral interval [start, end).
+/// In practice, this is often used to represent memory ranges in HOBs.
+///
 pub trait Interval: Clone + Ord {
     fn start(&self) -> u64;
 
@@ -87,66 +109,5 @@ pub trait Interval: Clone + Ord {
         }
 
         result
-    }
-}
-
-mod hex_format {
-    use alloc::format;
-    use core::fmt::LowerHex;
-    use serde::Deserialize;
-    use serde::{self, Deserializer, Serializer};
-
-    pub fn serialize<T, S>(num: &T, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        T: LowerHex,
-        S: Serializer,
-    {
-        serializer.serialize_str(&format!("0x{:x}", num))
-    }
-
-    pub trait FromStrRadix {
-        fn from_str_radix_16(src: &str) -> Result<Self, &'static str>
-        where
-            Self: Sized;
-    }
-
-    impl FromStrRadix for u8 {
-        fn from_str_radix_16(src: &str) -> Result<Self, &'static str> {
-            u8::from_str_radix(src, 16).map_err(|_| "Invalid hex u8")
-        }
-    }
-
-    impl FromStrRadix for u16 {
-        fn from_str_radix_16(src: &str) -> Result<Self, &'static str> {
-            u16::from_str_radix(src, 16).map_err(|_| "Invalid hex u16")
-        }
-    }
-
-    impl FromStrRadix for u32 {
-        fn from_str_radix_16(src: &str) -> Result<Self, &'static str> {
-            u32::from_str_radix(src, 16).map_err(|_| "Invalid hex u32")
-        }
-    }
-
-    impl FromStrRadix for u64 {
-        fn from_str_radix_16(src: &str) -> Result<Self, &'static str> {
-            u64::from_str_radix(src, 16).map_err(|_| "Invalid hex u64")
-        }
-    }
-
-    impl FromStrRadix for usize {
-        fn from_str_radix_16(src: &str) -> Result<Self, &'static str> {
-            usize::from_str_radix(src, 16).map_err(|_| "Invalid hex usize")
-        }
-    }
-
-    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<T, D::Error>
-    where
-        T: FromStrRadix,
-        D: Deserializer<'de>,
-    {
-        let s: &str = Deserialize::deserialize(deserializer)?;
-        let s = s.strip_prefix("0x").ok_or_else(|| serde::de::Error::custom("Missing '0x' prefix"))?;
-        T::from_str_radix_16(s).map_err(serde::de::Error::custom)
     }
 }

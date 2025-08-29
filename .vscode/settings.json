@@ -1,5 +1,7 @@
 {
     "rust-analyzer.cargo.features": [
         "serde"
-    ]
+    ],
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true
 }
