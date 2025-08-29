@@ -1,3 +1,16 @@
+//! Serializable HOB Definitions and Utilities
+//!
+//! Defines serializable representations of various HOB types and utilities for parsing these HOBs.
+//! These representations can be serialized to and deserialized from JSON format using `serde`.
+//! For more information on the standard HOB format, see `hob.rs`.
+//!
+//! ## License
+//!
+//! Copyright (C) Microsoft Corporation. All rights reserved.
+//!
+//! SPDX-License-Identifier: BSD-2-Clause-Patent
+//!
+
 use core::cmp::Ordering;
 
 use crate::hob::Hob;

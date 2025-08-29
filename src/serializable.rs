@@ -50,16 +50,21 @@ pub fn format_guid(guid: Guid) -> String {
 /// In practice, this is often used to represent memory ranges in HOBs.
 ///
 pub trait Interval: Clone + Ord {
+    /// Start of the interval (inclusive).
     fn start(&self) -> u64;
 
+    /// End of the interval (exclusive).
     fn end(&self) -> u64;
 
+    /// Merge two overlapping or adjacent intervals.
     fn merge(&self, other: &Self) -> Self;
 
+    /// Length of the interval.
     fn length(&self) -> u64 {
         self.end() - self.start()
     }
 
+    /// Check if this interval fully contains another one.
     fn contains(&self, other: &Self) -> bool {
         self.start() <= other.start() && self.end() >= other.end()
     }
@@ -86,10 +91,12 @@ pub trait Interval: Clone + Ord {
         self.end() == other.start() || other.end() == self.start()
     }
 
+    /// Try to merge two intervals if they are overlapping or adjacent.
     fn try_merge(&self, other: &Self) -> Option<Self> {
         if self.overlaps(other) || self.adjacent(other) { Some(self.merge(other)) } else { None }
     }
 
+    /// Merge a list of intervals into a minimal set of non-overlapping intervals.
     fn merge_intervals(intervals: &[&Self]) -> Vec<Self> {
         if intervals.is_empty() {
             return Vec::new();

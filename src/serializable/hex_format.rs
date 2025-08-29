@@ -1,3 +1,14 @@
+//! Hex Format Utilities
+//!
+//! Helpers to convert numbers to/from hex strings in `serde` serialization/deserialization.
+//!
+//! ## License
+//!
+//! Copyright (C) Microsoft Corporation. All rights reserved.
+//!
+//! SPDX-License-Identifier: BSD-2-Clause-Patent
+//!
+
 use alloc::format;
 use core::fmt::LowerHex;
 use serde::Deserialize;
@@ -14,6 +25,7 @@ where
 
 /// Trait to parse a number from a hex string (with or without "0x" prefix).
 pub trait FromStrRadix {
+    /// Parse from a hex string without "0x" prefix.
     fn from_str_radix_16(src: &str) -> Result<Self, &'static str>
     where
         Self: Sized;
