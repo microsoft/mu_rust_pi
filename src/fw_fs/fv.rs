@@ -16,7 +16,6 @@ use r_efi::efi;
 
 pub type EfiFvFileType = u8;
 
-
 pub const FFS_REVISION: u8 = 2;
 pub const FFS_V2_MAX_FILE_SIZE: usize = 0x1000000;
 
