@@ -23,9 +23,9 @@ pub const PROTOCOL_GUID: efi::Guid =
 /// time has passed.  This information is used to signal timer based events.
 ///
 /// * time -  Time since the last timer interrupt in 100 ns units. This will
-///                   typically be TimerPeriod, but if a timer interrupt is missed, and the
-///                   EFI_TIMER_ARCH_PROTOCOL driver can detect missed interrupts, then Time
-///                   will contain the actual amount of time since the last interrupt.
+///   typically be TimerPeriod, but if a timer interrupt is missed, and the
+///   EFI_TIMER_ARCH_PROTOCOL driver can detect missed interrupts, then Time
+///   will contain the actual amount of time since the last interrupt.
 pub type EfiTimerNotify = extern "efiapi" fn(time: u64);
 
 /// This function registers the handler NotifyFunction so it is called every time
@@ -39,18 +39,18 @@ pub type EfiTimerNotify = extern "efiapi" fn(time: u64);
 /// then EFI_INVALID_PARAMETER is returned.  If an error occurs attempting to
 /// register the NotifyFunction with the timer interrupt, then EFI_DEVICE_ERROR
 /// is returned.
-/// * this -            The EFI_TIMER_ARCH_PROTOCOL instance.
+///
+/// * this - The EFI_TIMER_ARCH_PROTOCOL instance.
 /// * notify_function - The function to call when a timer interrupt fires. This
-///                     function executes at TPL_HIGH_LEVEL. The DXE Core will
-///                     register a handler for the timer interrupt, so it can know
-///                     how much time has passed. This information is used to
-///                     signal timer based events. NULL will unregister the handler.
+///   function executes at TPL_HIGH_LEVEL. The DXE Core will register a handler for
+///   the timer interrupt, so it can know how much time has passed. This information
+///   is used to signal timer based events. NULL will unregister the handler.
 /// * @retval - EFI_SUCCESS: The timer handler was registered.
 /// * @retval - EFI_UNSUPPORTED: The platform does not support timer interrupts.
 /// * @retval - EFI_ALREADY_STARTED: NotifyFunction is not NULL, and a handler is already
-///                                  registered.
+///   registered.
 /// * @retval - EFI_INVALID_PARAMETER: NotifyFunction is NULL, and a handler was not
-///                                    previously registered.
+///   previously registered.
 /// * @retval - EFI_DEVICE_ERROR: The timer handler could not be registered.
 pub type EfiTimerRegisterHandler =
     extern "efiapi" fn(this: *mut Protocol, notify_function: EfiTimerNotify) -> efi::Status;
@@ -68,11 +68,10 @@ pub type EfiTimerRegisterHandler =
 /// interrupt fires.
 /// * this - The EFI_TIMER_ARCH_PROTOCOL instance.
 /// * timer_period - The rate to program the timer interrupt in 100 nS units. If
-///                  the timer hardware is not programmable, then EFI_UNSUPPORTED is
-///                  returned. If the timer is programmable, then the timer period
-///                  will be rounded up to the nearest timer period that is supported
-///                  by the timer hardware. If TimerPeriod is set to 0, then the
-///                  timer interrupts will be disabled.
+///   the timer hardware is not programmable, then EFI_UNSUPPORTED is returned.
+///   If the timer is programmable, then the timer period will be rounded up to
+///   the nearest timer period that is supported by the timer hardware. If TimerPeriod
+///   is set to 0, then the timer interrupts will be disabled.
 /// * @retval - EFI_SUCCESS: The timer period was changed.
 /// * @retval - EFI_UNSUPPORTED: The platform cannot change the period of the timer interrupt.
 /// * @retval - EFI_DEVICE_ERROR: The timer period could not be changed due to a device error.
@@ -84,7 +83,7 @@ pub type EfiTimerSetTimerPeriod = extern "efiapi" fn(this: *mut Protocol, timer_
 /// returned, then the timer is currently disabled.
 /// * this - The EFI_TIMER_ARCH_PROTOCOL instance.
 /// * timer_period - A pointer to the timer period to retrieve in 100 ns units. If
-///                  0 is returned, then the timer is currently disabled.
+///   0 is returned, then the timer is currently disabled.
 /// * @retval - EFI_SUCCESS: The timer period was returned in TimerPeriod.
 /// * @retval - EFI_INVALID_PARAMETER: TimerPeriod is NULL.
 pub type EfiTimerGetTimerPeriod = extern "efiapi" fn(*mut Protocol, *mut u64) -> efi::Status;
