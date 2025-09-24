@@ -11,7 +11,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause-Patent
 //!
 
-use core::sync::atomic::AtomicBool;
+use core::{ffi::c_void, sync::atomic::AtomicBool};
 
 use crate::list_entry;
 use r_efi::efi;
@@ -42,4 +42,35 @@ pub struct Protocol {
     pub memory_map_virtual: *mut efi::MemoryDescriptor,
     pub virtual_mode: AtomicBool,
     pub at_runtime: AtomicBool,
+}
+
+/// Related definition for runtime architectural protocol as the entry type
+/// for the image list.
+///
+/// # Documentation
+/// UEFI Platform Initialization Specification, Release 1.8, Section II-12.8.1
+#[repr(C)]
+#[derive(Debug)]
+pub struct ImageEntry {
+    pub image_base: *mut c_void,
+    pub image_size: u64,
+    pub relocation_data: *mut c_void,
+    pub handle: efi::Handle,
+    pub link: list_entry::Entry,
+}
+
+/// Related definition for runtime architectural protocol as the entry type
+/// for the event list.
+///
+/// # Documentation
+/// UEFI Platform Initialization Specification, Release 1.8, Section II-12.8.1
+#[repr(C)]
+#[derive(Debug)]
+pub struct EventEntry {
+    pub event_type: u32,
+    pub notify_tpl: efi::Tpl,
+    pub notify_function: efi::EventNotify,
+    pub context: *mut c_void,
+    pub event: efi::Event,
+    pub link: list_entry::Entry,
 }
