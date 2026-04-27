@@ -1,6 +1,6 @@
 [package]
 name = "mu_pi"
-version = "6.0.0"
+version = "7.0.0"
 edition = "2024"
 license = "BSD-2-Clause-Patent"
 description = "Platform Initialization (PI) Specification definitions and support code in Rust."
@@ -13,7 +13,7 @@ categories = ["embedded", "hardware-support", "no-std"]
 [dependencies]
 indoc = "2.0"
 num-traits = { version = "0.2", default-features = false }
-r-efi = { version = "5.0.0", default-features = false }
+r-efi = { version = "6.0.0", default-features = false }
 uuid = { version = "1.8", default-features = false }
 serde = { version = "1", default-features = false, optional = true, features = [
   "alloc",
