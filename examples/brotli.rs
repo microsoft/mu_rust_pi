@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 extern crate mu_pi;
 use alloc_no_stdlib::{self, SliceWrapper, SliceWrapperMut, define_index_ops_mut};
 use brotli_decompressor::{BrotliDecompressStream, BrotliResult, BrotliState, HuffmanCode};

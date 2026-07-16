@@ -1,5 +1,8 @@
 # Mu Rust Platform Initialization (PI)
 
+> **DEPRECATED**: This repository has been deprecated. Most functionality has moved to the [patina](https://crates.io/crates/patina)
+> crate.
+
 Platform Initialization (PI) Specification definitions and support code in rust.
 
 This repository is part of [Project Mu](https://microsoft.github.io/mu).
