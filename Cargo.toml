@@ -1,9 +1,9 @@
 [package]
 name = "mu_pi"
-version = "7.0.0"
+version = "8.0.0"
 edition = "2024"
 license = "BSD-2-Clause-Patent"
-description = "Platform Initialization (PI) Specification definitions and support code in Rust."
+description = "DEPRECATED: Please use the patina crate instead. Platform Initialization (PI) Specification definitions and support code in Rust."
 repository = "https://github.com/microsoft/mu_rust_pi"
 readme = "README.md"
 rust-version = "1.85"
