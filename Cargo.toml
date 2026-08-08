@@ -23,7 +23,7 @@ serde_json = { version = "1.0", default-features = false, optional = true, featu
 
 [dev-dependencies]
 serde = { version = "1.0.219", features = ["derive"]}
-serde_yml = "0.0.12"
+serde_yml = "0.0.13"
 brotli-decompressor = { version= "5.0.0", default-features = false}
 alloc-no-stdlib = { version = "~2.0"}
 
